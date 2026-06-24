@@ -1,0 +1,136 @@
+---
+title: "Understanding and Managing Rate Limits"
+sidebarTitle: "Rate Limits"
+description: "Learn how NexoraNode enforces per-second rate limits, how to read rate-limit headers, handle 429 errors, and optimize request patterns."
+---
+
+NexoraNode enforces per-second rate limits on all RPC endpoints to maintain platform stability and ensure fair access for every user. When you exceed your plan's limit, the API returns an HTTP `429 Too Many Requests` response instead of processing your call. This guide explains how limits work, how to detect them, and how to design your application to stay within bounds.
+
+## Rate Limit Tiers
+
+Your rate limit is determined by your current plan. All limits are measured per second, per API key.
+
+| Plan | Rate Limit | Notes |
+|---|---|---|
+| **Free** | 10 requests/s | Suitable for development and low-traffic applications |
+| **Pro** | 100 requests/s | Recommended for production applications |
+| **Enterprise** | Custom | Contact sales for volume-based or dedicated limits |
+
+<Note>
+  To view your current plan or upgrade, visit [Plans & Pricing](/concepts/plans).
+</Note>
+
+## Rate Limit Headers
+
+Every HTTP response from NexoraNode includes headers that tell you exactly where you stand within the current rate limit window. Inspect these headers to proactively throttle your requests before hitting a `429`.
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | Your plan's maximum allowed requests per second |
+| `X-RateLimit-Remaining` | Number of requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the current window resets |
+
+**Example HTTP response headers:**
+
+```bash
+HTTP/2 200
+content-type: application/json
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 73
+X-RateLimit-Reset: 1718035261
+```
+
+In this example, your Pro plan allows 100 req/s, you have 73 remaining in the current window, and the window resets at Unix timestamp `1718035261`.
+
+## Handling 429 Errors
+
+When you exceed your rate limit, NexoraNode responds with HTTP status `429` and a structured error body:
+
+```json
+{
+  "error": {
+    "code": "rate_limit_exceeded",
+    "message": "You have exceeded your plan's rate limit of 100 requests/s. Please slow down or upgrade your plan.",
+    "status": 429
+  }
+}
+```
+
+The most robust way to handle `429` responses is **exponential backoff with jitter** — wait progressively longer between retries, using the `X-RateLimit-Reset` header to determine the earliest safe retry time.
+
+```javascript
+const API_KEY = "nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+const NETWORK = "ethereum";
+const MAX_RETRIES = 5;
+
+async function rpcRequest(method, params = []) {
+  const url = `https://rpc.nexoranode.xyz/${API_KEY}/${NETWORK}`;
+  const body = JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 });
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+
+    if (response.status === 429) {
+      const resetHeader = response.headers.get("X-RateLimit-Reset");
+      const resetAt = resetHeader ? parseInt(resetHeader, 10) * 1000 : null;
+      const now = Date.now();
+
+      // Wait until the window resets, or fall back to exponential backoff
+      const backoffMs = resetAt && resetAt > now
+        ? resetAt - now
+        : Math.min(100 * 2 ** attempt, 10_000); // cap at 10s
+
+      // Add jitter (±10%) to avoid thundering herd
+      const jitter = backoffMs * 0.1 * (Math.random() * 2 - 1);
+      const waitMs = Math.max(0, backoffMs + jitter);
+
+      console.warn(
+        `Rate limited. Retrying in ${Math.round(waitMs)}ms ` +
+        `(attempt ${attempt + 1}/${MAX_RETRIES})...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`RPC error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  throw new Error(`Request failed after ${MAX_RETRIES} retries due to rate limiting.`);
+}
+
+// Usage
+const result = await rpcRequest("eth_blockNumber");
+console.log("Latest block:", parseInt(result.result, 16));
+```
+
+## Best Practices
+
+Staying within your rate limit isn't just about handling `429` errors gracefully — it's about designing your request patterns so you rarely hit the limit in the first place.
+
+**Use batch requests**
+
+JSON-RPC supports batching multiple method calls into a single HTTP request. Sending one request with 10 method calls counts as **one request** against your rate limit, not ten. See [Endpoints & Batching](/concepts/endpoints) for details and examples.
+
+**Cache `eth_blockNumber` results**
+
+Ethereum produces a new block approximately every **12 seconds**. If your application frequently reads the latest block number, cache the result locally and refresh it on a 12-second interval rather than polling the RPC on every operation. This alone can eliminate a large share of redundant requests.
+
+**Use WebSocket subscriptions instead of polling**
+
+Rather than calling `eth_blockNumber`, `eth_getLogs`, or similar methods on a timer, open a single WebSocket connection and subscribe to `newHeads` or `logs` events. You receive data exactly when it changes, with zero wasted requests. See [Real-Time Data with WebSocket Subscriptions](/guides/websocket-connections).
+
+**Distribute load across multiple API keys (Enterprise)**
+
+On the Enterprise plan, you can create multiple API keys and distribute traffic across them — for example, assigning different keys to different services or geographic regions. Each key carries its own rate limit budget, so this effectively multiplies your available throughput. [Contact sales](/concepts/plans) to discuss Enterprise options.
+
+<Note>
+  Ready to increase your rate limit? Visit [Plans & Pricing](/concepts/plans) to compare tiers and upgrade your account.
+</Note>

@@ -1,47 +1,93 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with NexoraNode in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Learn how to provision a NexoraNode endpoint and send a live blockchain RPC request in under five minutes with any HTTP client."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+This quickstart walks you through provisioning your first NexoraNode endpoint and sending a live RPC request to the Ethereum mainnet. By the end, you'll have a working endpoint URL, a verified `eth_blockNumber` response, and a basic ethers.js snippet you can drop straight into your project.
 
 ## Prerequisites
 
-Before you begin, you must have:
+- A NexoraNode account — [create one here](/getting-started/create-account) if you haven't already.
+- An active API key — see [API Keys](/getting-started/api-keys) to generate one.
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+## Steps
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Create an Endpoint">
+    1. Log in to the [NexoraNode dashboard](https://app.nexoranode.xyz).
+    2. Navigate to **Endpoints** in the left sidebar and click **New Endpoint**.
+    3. Select **Ethereum Mainnet** from the network dropdown.
+    4. Give your endpoint a name (e.g., `my-first-endpoint`) and click **Create**.
+    5. Copy the generated endpoint URL — it will look like this:
 
-    ```bash
-    npm install your-package
     ```
+    https://rpc.nexoranode.xyz/nx_YOUR_KEY/ethereum
+    ```
+
+    Keep this URL handy; you'll use it in the next step.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Make Your First RPC Call">
+    Use any HTTP client to send a JSON-RPC request. The example below uses `curl` to call `eth_blockNumber`, which returns the latest block number on Ethereum mainnet.
 
     ```bash
-    your-cli init
+    curl -X POST https://rpc.nexoranode.xyz/nx_YOUR_KEY/ethereum \
+      -H "Content-Type: application/json" \
+      -d '{
+        "jsonrpc": "2.0",
+        "method": "eth_blockNumber",
+        "params": [],
+        "id": 1
+      }'
     ```
+
+    If your API key is valid and your endpoint is active, you'll receive a response similar to:
+
+    ```json
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": "0x12a3f9c"
+    }
+    ```
+
+    The `result` field is the current block number encoded as a hexadecimal string. Convert it to decimal with `parseInt("0x12a3f9c", 16)` — in this example that's block **19,480,476**.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
+  <Step title="Explore with ethers.js">
+    If you're building a JavaScript or TypeScript application, you can connect ethers.js v6 directly to your NexoraNode endpoint:
+
+    ```javascript
+    import { ethers } from "ethers";
+
+    const provider = new ethers.JsonRpcProvider(
+      "https://rpc.nexoranode.xyz/nx_YOUR_KEY/ethereum"
+    );
+
+    const blockNumber = await provider.getBlockNumber();
+    console.log("Latest block:", blockNumber);
     ```
+
+    Replace `nx_YOUR_KEY` with your actual API key. The `JsonRpcProvider` handles JSON-RPC serialization automatically, so you can immediately call any ethers.js provider method — `getBalance`, `getTransactionReceipt`, `getLogs`, and so on.
+  </Step>
+
+  <Step title="Monitor Usage">
+    After sending a few requests, head back to the [dashboard](https://app.nexoranode.xyz) and open the **Analytics** tab for your endpoint. You'll see real-time graphs for:
+
+    - **Request volume** — total calls over time
+    - **Latency** — p50, p95, and p99 response times
+    - **Error rate** — 4xx and 5xx responses broken down by type
+    - **Rate-limit events** — how often you've hit your plan's request-per-second cap
+
+    Use these metrics to right-size your plan and debug unexpected failures.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+<Note>
+  The **Free plan** includes 1,000,000 requests per month with a rate limit of 10 requests per second. Once you exceed either limit, the API returns an HTTP `429 Too Many Requests` response. Upgrade to the **Pro plan** (25M req/mo, 100 req/s) or **Enterprise** for higher limits — see [Plans & Pricing](/concepts/plans) for details.
+</Note>
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+<Tip>
+  Ready to go deeper? The [Send Your First Request](/guides/send-first-request) guide covers advanced request patterns, error handling, retries, and WebSocket subscriptions in detail.
 </Tip>

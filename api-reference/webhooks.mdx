@@ -1,0 +1,335 @@
+---
+title: "Webhooks API — Configure Usage and Health Alerts"
+sidebarTitle: "Webhooks"
+description: "Create and manage NexoraNode webhooks to receive HTTP POST notifications for usage thresholds, node status changes, and rate limit events."
+---
+
+Webhooks deliver HTTP POST notifications to a URL you control whenever key account events occur on NexoraNode. Instead of polling the API, configure a webhook once and let the platform push real-time alerts for usage thresholds, node status transitions, and rate limit events directly to your infrastructure. All webhook management endpoints require a full-scope API key.
+
+<Info>
+  **Base URL:** `https://api.nexoranode.xyz/v1`  
+  **Authentication:** `Authorization: Bearer {API_KEY}`
+</Info>
+
+---
+
+## Webhook Events
+
+NexoraNode can notify your endpoint for the following event types:
+
+| Event | Description |
+|-------|-------------|
+| `usage.threshold_reached` | Fired when your account's request consumption for the current billing period crosses a configured percentage of your plan limit (e.g. 80%). Requires `threshold_percent` to be set on the webhook. |
+| `node.status_changed` | Fired whenever a node transitions between states — for example, from `provisioning` to `active`, or from `active` to `paused`. The payload includes the previous and current status values. |
+| `api_key.rate_limited` | Fired when an API key is temporarily rate-limited due to exceeding the request rate ceiling for your plan. Useful for alerting on unexpected traffic spikes. |
+
+---
+
+## Webhook Payload Format
+
+NexoraNode delivers all webhook events as HTTP POST requests with a `Content-Type: application/json` body. The top-level envelope is consistent across all event types:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event` | string | The event type string (e.g. `usage.threshold_reached`). |
+| `timestamp` | string | ISO 8601 timestamp of when the event was generated. |
+| `data` | object | Event-specific payload. Shape varies by event type (see below). |
+
+**Example payload — `usage.threshold_reached`:**
+
+```json
+{
+  "event": "usage.threshold_reached",
+  "timestamp": "2024-06-18T15:30:00Z",
+  "data": {
+    "threshold_percent": 80,
+    "requests_used": 40012544,
+    "requests_limit": 50000000,
+    "percent_used": 80.02,
+    "billing_period_start": "2024-06-01T00:00:00Z",
+    "billing_period_end": "2024-06-30T23:59:59Z",
+    "plan": "Growth"
+  }
+}
+```
+
+<Tip>
+  Your webhook endpoint should return a `2xx` HTTP status code within **10 seconds** to acknowledge receipt. If NexoraNode does not receive a `2xx`, it will retry delivery up to **5 times** with exponential backoff (delays of 1s, 5s, 30s, 2m, and 10m).
+</Tip>
+
+---
+
+## Create Webhook
+
+<div className="api-method">
+  <span className="method post">POST</span> `/v1/webhooks`
+</div>
+
+Registers a new webhook endpoint. You can subscribe to one or more event types per webhook URL, and configure HMAC signing for request verification.
+
+### Body Parameters
+
+<ParamField body="url" type="string" required>
+  The destination URL that will receive POST requests. **Must use HTTPS.** Plain HTTP URLs are rejected.
+</ParamField>
+
+<ParamField body="events" type="array" required>
+  An array of one or more event type strings to subscribe to. Valid values: `usage.threshold_reached`, `node.status_changed`, `api_key.rate_limited`.
+
+  Example: `["usage.threshold_reached", "node.status_changed"]`
+</ParamField>
+
+<ParamField body="threshold_percent" type="integer">
+  Required when `events` includes `usage.threshold_reached`. An integer between `1` and `100` representing the quota percentage at which the event fires. For example, `80` triggers the webhook when 80% of your monthly request limit is consumed.
+</ParamField>
+
+<ParamField body="secret" type="string">
+  An optional secret string used to sign outgoing webhook payloads with HMAC-SHA256. When provided, each delivery includes an `X-Nexora-Signature` header that your server can verify. See [Verifying Webhook Signatures](#verifying-webhook-signatures) below.
+</ParamField>
+
+### Response
+
+Returns the created webhook object.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the webhook.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  The registered destination URL.
+</ResponseField>
+
+<ResponseField name="events" type="array">
+  List of event types this webhook is subscribed to.
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the webhook is active and will receive deliveries. Newly created webhooks are `true` by default.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the webhook was created.
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "id": "wh_04lm9q6rt7iyv1scn0bef7hz",
+  "url": "https://alerts.example.com/hooks/nexora",
+  "events": [
+    "usage.threshold_reached",
+    "node.status_changed"
+  ],
+  "active": true,
+  "created_at": "2024-06-18T12:00:00Z"
+}
+```
+
+```bash cURL
+curl --request POST \
+  --url "https://api.nexoranode.xyz/v1/webhooks" \
+  --header "Authorization: Bearer {API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "url": "https://alerts.example.com/hooks/nexora",
+    "events": ["usage.threshold_reached", "node.status_changed"],
+    "threshold_percent": 80,
+    "secret": "your_signing_secret"
+  }'
+```
+</CodeGroup>
+
+---
+
+## List Webhooks
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/webhooks`
+</div>
+
+Returns a paginated list of all webhooks registered on your account.
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Webhook object">
+    <ResponseField name="id" type="string">
+      Unique identifier of the webhook.
+    </ResponseField>
+    <ResponseField name="url" type="string">
+      Registered destination URL.
+    </ResponseField>
+    <ResponseField name="events" type="array">
+      Event types this webhook is subscribed to.
+    </ResponseField>
+    <ResponseField name="active" type="boolean">
+      Whether the webhook is currently active.
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of webhook creation.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  <Expandable title="Pagination metadata">
+    <ResponseField name="total" type="integer">
+      Total number of webhooks on the account.
+    </ResponseField>
+    <ResponseField name="page" type="integer">
+      Current page number.
+    </ResponseField>
+    <ResponseField name="per_page" type="integer">
+      Number of results per page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "data": [
+    {
+      "id": "wh_04lm9q6rt7iyv1scn0bef7hz",
+      "url": "https://alerts.example.com/hooks/nexora",
+      "events": [
+        "usage.threshold_reached",
+        "node.status_changed"
+      ],
+      "active": true,
+      "created_at": "2024-06-18T12:00:00Z"
+    },
+    {
+      "id": "wh_05mn0r7su8jzw2tdo1cfg8ia",
+      "url": "https://ops.example.com/webhooks/ratelimit",
+      "events": [
+        "api_key.rate_limited"
+      ],
+      "active": true,
+      "created_at": "2024-05-30T09:14:22Z"
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "page": 1,
+    "per_page": 20
+  }
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/webhooks" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Delete Webhook
+
+<div className="api-method">
+  <span className="method delete">DELETE</span> `/v1/webhooks/{webhookId}`
+</div>
+
+Permanently removes a webhook. No further events will be delivered to the registered URL after deletion.
+
+### Path Parameters
+
+<ParamField path="webhookId" type="string" required>
+  The unique identifier of the webhook to delete (e.g. `wh_04lm9q6rt7iyv1scn0bef7hz`).
+</ParamField>
+
+### Response
+
+Returns `204 No Content` with an empty body on success.
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.nexoranode.xyz/v1/webhooks/wh_04lm9q6rt7iyv1scn0bef7hz" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Verifying Webhook Signatures
+
+If you provided a `secret` when creating the webhook, NexoraNode signs every delivery with an HMAC-SHA256 digest of the raw request body using your secret as the key. The signature is included in the `X-Nexora-Signature` request header in the format:
+
+```
+X-Nexora-Signature: sha256=<hex_digest>
+```
+
+Verify the signature in your webhook handler to ensure the payload originated from NexoraNode and has not been tampered with. The following Node.js example demonstrates the verification logic:
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhookSignature(req, secret) {
+  const signatureHeader = req.headers['x-nexora-signature'];
+
+  if (!signatureHeader) {
+    throw new Error('Missing X-Nexora-Signature header');
+  }
+
+  // signatureHeader is in the format: "sha256=<hex_digest>"
+  const [algorithm, receivedDigest] = signatureHeader.split('=');
+
+  if (algorithm !== 'sha256') {
+    throw new Error(`Unexpected signature algorithm: ${algorithm}`);
+  }
+
+  // Compute HMAC-SHA256 of the raw request body using your secret
+  const expectedDigest = crypto
+    .createHmac('sha256', secret)
+    .update(req.rawBody) // use the raw, unparsed body string
+    .digest('hex');
+
+  // Use timingSafeEqual to prevent timing attacks
+  const receivedBuffer = Buffer.from(receivedDigest, 'hex');
+  const expectedBuffer = Buffer.from(expectedDigest, 'hex');
+
+  if (
+    receivedBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
+  ) {
+    throw new Error('Webhook signature verification failed');
+  }
+
+  return true; // Signature is valid
+}
+```
+
+<Note>
+  Use `req.rawBody` (the unparsed request body string) — **not** a re-serialized JSON object. Parsing and re-stringifying the body may alter whitespace or key order, causing the digest to mismatch even for legitimate payloads.
+</Note>
+
+<Warning>
+  **Always verify webhook signatures in production.** Without signature verification, a malicious actor could send forged requests to your webhook endpoint. Any processing of unverified webhook data — such as triggering infrastructure changes or modifying billing records — is a security risk.
+</Warning>
+
+---
+
+## Error Responses
+
+```json
+{
+  "error": {
+    "code": "INVALID_WEBHOOK_URL",
+    "message": "Webhook URLs must use HTTPS.",
+    "status": 400
+  }
+}
+```
+
+| HTTP Status | Code | Description |
+|-------------|------|-------------|
+| `400` | `INVALID_WEBHOOK_URL` | The URL is malformed or does not use HTTPS. |
+| `400` | `INVALID_EVENT_TYPE` | One or more values in `events` are not recognized event type strings. |
+| `400` | `MISSING_THRESHOLD_PERCENT` | `events` includes `usage.threshold_reached` but `threshold_percent` was not provided. |
+| `400` | `INVALID_THRESHOLD_PERCENT` | `threshold_percent` must be an integer between `1` and `100`. |
+| `401` | `UNAUTHORIZED` | Missing or invalid API key. |
+| `404` | `WEBHOOK_NOT_FOUND` | No webhook exists with the provided `webhookId`. |
+| `429` | `RATE_LIMITED` | Too many requests. Check the `Retry-After` response header. |

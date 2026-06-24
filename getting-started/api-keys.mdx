@@ -1,0 +1,117 @@
+---
+title: "Create and Manage NexoraNode API Keys"
+sidebarTitle: "API Keys"
+description: "Generate and manage API keys to authenticate your RPC requests and NexoraNode management API calls from your account dashboard."
+---
+
+API keys are the primary authentication mechanism for NexoraNode. Every request you make — whether it's an RPC call to a blockchain node or a management API call to list your endpoints — must include a valid API key. Keys are scoped, rate-limitable, and can be revoked instantly from the dashboard, giving you fine-grained control over access to your account.
+
+---
+
+## Creating an API Key
+
+<Steps>
+  <Step title="Open the API Keys Page">
+    Log in to the [NexoraNode dashboard](https://app.nexoranode.xyz) and navigate to **Account → API Keys** in the left sidebar.
+  </Step>
+
+  <Step title="Click New API Key">
+    Click the **New API Key** button in the top-right corner of the API Keys page. A creation dialog appears.
+  </Step>
+
+  <Step title="Enter a Name and Description">
+    Give your key a descriptive name so you can identify it later (e.g., `production-backend` or `local-dev`). The optional description field is useful for noting which application or service uses the key.
+  </Step>
+
+  <Step title="Set an Optional Per-Key Rate Limit">
+    By default, a key inherits the rate limit of your plan (e.g., 100 req/s on Pro). You can set a lower per-key limit to cap usage for a specific application — useful when you want to prevent one service from consuming your entire plan quota. Leave the field blank to use your plan default.
+  </Step>
+
+  <Step title="Click Create and Copy Your Key">
+    Click **Create Key**. Your new API key is displayed **once** in full — copy it immediately and store it in a secure location such as a password manager or secrets manager. After you close the dialog, the full key is never shown again. If you lose it, you'll need to revoke it and create a new one.
+
+    API keys follow this format:
+
+    ```
+    nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+    ```
+
+    They always begin with the `nx_` prefix followed by 32 alphanumeric characters.
+  </Step>
+</Steps>
+
+---
+
+## Using Your API Key
+
+### RPC Requests
+
+For RPC calls, embed your API key directly in the endpoint URL path:
+
+```
+https://rpc.nexoranode.xyz/{YOUR_API_KEY}/{network-slug}
+```
+
+**Example — querying the latest Ethereum block number:**
+
+```bash
+curl -X POST https://rpc.nexoranode.xyz/nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6/ethereum \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_blockNumber",
+    "params": [],
+    "id": 1
+  }'
+```
+
+Replace `nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6` with your actual API key and `ethereum` with the [network slug](/concepts/networks) for the chain you want to query.
+
+### Management API Requests
+
+For management API calls, pass your API key as a Bearer token in the `Authorization` header:
+
+```bash
+curl https://api.nexoranode.xyz/v1/nodes \
+  -H "Authorization: Bearer nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+```
+
+This example calls `GET /v1/nodes` to list all nodes associated with your account. Only keys with the `full` scope can access the management API — see [Key Permissions and Scopes](#key-permissions-and-scopes) below.
+
+---
+
+## Key Permissions and Scopes
+
+When creating an API key you assign it a **scope** that determines which parts of the NexoraNode platform it can access.
+
+| Scope | Access |
+|---|---|
+| **`rpc`** | RPC endpoints only (`https://rpc.nexoranode.xyz/...` and `wss://ws.nexoranode.xyz/...`). Cannot call the management API. Use this scope for application-level keys embedded in backend services. |
+| **`full`** | RPC endpoints **plus** the management API (`https://api.nexoranode.xyz/v1`). Use this scope for keys used by CI/CD pipelines, infrastructure-as-code tooling, or admin scripts that need to create or modify resources. |
+
+Follow the **principle of least privilege**: use `rpc`-scoped keys for anything that makes RPC calls, and restrict `full`-scoped keys to automation workflows that genuinely need management API access.
+
+---
+
+## Rotating and Revoking Keys
+
+### Revoking a Key
+
+To revoke a key immediately, go to **Account → API Keys**, find the key in the list, and click **Revoke**. Confirm the action in the dialog. The key is invalidated within seconds and all subsequent requests using it return `HTTP 401 Unauthorized`.
+
+### Create-Before-Revoke Workflow
+
+To rotate a key in a production system without downtime, follow this sequence:
+
+1. **Create a new key** with the same scope and rate-limit settings as the key you're replacing.
+2. **Deploy the new key** to all services and infrastructure that currently use the old key.
+3. **Verify** that your services are successfully authenticating with the new key (check the Analytics tab — requests should appear under the new key name).
+4. **Revoke the old key** only after you've confirmed the new key is fully operational.
+
+This approach ensures there is no window where your services are running with an invalid key.
+
+---
+
+<Warning>
+  **Never expose API keys in client-side code or public repositories.** Keys embedded in browser JavaScript, mobile app bundles, or committed to a public Git repository can be extracted and abused by anyone. Always load keys from environment variables or a secrets manager on the server side. If you suspect a key has been compromised, revoke it immediately and issue a replacement.
+</Warning>

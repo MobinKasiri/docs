@@ -1,0 +1,193 @@
+---
+title: "Configure wagmi to Use NexoraNode Endpoints"
+sidebarTitle: "wagmi"
+description: "Set up wagmi v2 with a custom NexoraNode HTTP transport so your React app routes all blockchain calls through your own RPC endpoints."
+---
+
+wagmi is the go-to React hooks library for Ethereum — it handles wallet connections, account state, and contract interactions through a declarative, hooks-based API. By configuring a custom NexoraNode transport, every RPC call your React app makes is routed through your dedicated infrastructure rather than shared public endpoints, giving you higher rate limits, consistent uptime, and full observability.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install wagmi viem
+```
+
+```bash yarn
+yarn add wagmi viem
+```
+
+```bash pnpm
+pnpm add wagmi viem
+```
+
+</CodeGroup>
+
+## Configure wagmi
+
+Build a wagmi `config` object that maps each chain ID to an `http()` transport pointed at your NexoraNode endpoint. Then wrap your React application with `WagmiProvider` and `QueryClientProvider` — wagmi v2 uses TanStack Query under the hood for caching and background refetching.
+
+<Note>
+  Your NexoraNode API key should be injected at **build time via a server-side
+  environment variable** (e.g. `NEXT_PUBLIC_NEXORA_API_KEY` in Next.js, or
+  baked in through your backend's API proxy). See the warning below before
+  exposing any key in a client bundle.
+</Note>
+
+```typescript
+// lib/wagmi.ts
+import { createConfig, http } from "wagmi";
+import { mainnet, polygon, arbitrum } from "wagmi/chains";
+
+const NEXORA_API_KEY = process.env.NEXT_PUBLIC_NEXORA_API_KEY;
+
+export const config = createConfig({
+  chains: [mainnet, polygon, arbitrum],
+  transports: {
+    [mainnet.id]: http(
+      `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`
+    ),
+    [polygon.id]: http(
+      `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/polygon`
+    ),
+    [arbitrum.id]: http(
+      `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/arbitrum`
+    ),
+  },
+});
+```
+
+```tsx
+// app/providers.tsx
+"use client";
+
+import { WagmiProvider } from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { config } from "@/lib/wagmi";
+
+const queryClient = new QueryClient();
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+```
+
+```tsx
+// app/layout.tsx
+import { Providers } from "./providers";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}
+```
+
+## Using Hooks
+
+With the provider in place, all wagmi hooks automatically use your NexoraNode transports. No additional configuration is needed at the hook call site.
+
+```tsx
+// components/ChainInfo.tsx
+"use client";
+
+import { useBlockNumber, useReadContract } from "wagmi";
+import { parseAbi } from "viem";
+import { mainnet } from "wagmi/chains";
+
+const TOKEN_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as const;
+const WALLET_ADDRESS = "0xYourWalletAddressHere" as const;
+
+export function ChainInfo() {
+  // Watch for new blocks in real time
+  const { data: blockNumber } = useBlockNumber({
+    chainId: mainnet.id,
+    watch: true,
+  });
+
+  // Read ERC-20 balance of an address
+  const { data: balance, isLoading } = useReadContract({
+    address: TOKEN_ADDRESS,
+    abi: parseAbi(["function balanceOf(address) view returns (uint256)"]),
+    functionName: "balanceOf",
+    args: [WALLET_ADDRESS],
+    chainId: mainnet.id,
+  });
+
+  return (
+    <div>
+      <p>Latest block: {blockNumber?.toString() ?? "loading..."}</p>
+      <p>
+        USDC balance:{" "}
+        {isLoading
+          ? "loading..."
+          : balance !== undefined
+          ? (Number(balance) / 1_000_000).toFixed(2)
+          : "—"}
+      </p>
+    </div>
+  );
+}
+```
+
+## Custom Chain Support
+
+If you're connecting to a private testnet or a chain not included in `wagmi/chains`, define it with `defineChain` and add a corresponding NexoraNode transport.
+
+```typescript
+// lib/wagmi.ts (extended for custom chain)
+import { createConfig, http } from "wagmi";
+import { mainnet } from "wagmi/chains";
+import { defineChain } from "viem";
+
+const NEXORA_API_KEY = process.env.NEXT_PUBLIC_NEXORA_API_KEY;
+
+// Define your private testnet
+export const myTestnet = defineChain({
+  id: 123456,
+  name: "My Private Testnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: [`https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/my-testnet`],
+      webSocket: [`wss://ws.nexoranode.xyz/${NEXORA_API_KEY}/my-testnet`],
+    },
+  },
+  testnet: true,
+});
+
+export const config = createConfig({
+  chains: [mainnet, myTestnet],
+  transports: {
+    [mainnet.id]: http(
+      `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`
+    ),
+    [myTestnet.id]: http(
+      `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/my-testnet`
+    ),
+  },
+});
+```
+
+<Warning>
+  **Never expose your NexoraNode API key in client-side code.** Keys embedded
+  in a frontend bundle are visible to anyone who inspects your site's network
+  traffic or source maps. Instead, proxy RPC calls through your own backend
+  (e.g. a Next.js API route or Edge Function) and inject the key exclusively on
+  the server. This prevents unauthorized usage and protects your rate limits.
+</Warning>

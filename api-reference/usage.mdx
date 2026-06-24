@@ -1,0 +1,223 @@
+---
+title: "Usage API — Query Request Analytics and Monthly Quotas"
+sidebarTitle: "Usage"
+description: "GET /v1/usage and GET /v1/usage/summary — retrieve request counts, error rates, latency percentiles, and billing period quota consumption."
+---
+
+The Usage API provides programmatic access to your account's analytics and monthly quota. Query time-series request counts, error rates, and latency percentiles across any date range using `/v1/usage`, or get a quick snapshot of your billing-period consumption against your plan limit with `/v1/usage/summary`. Both endpoints require a full-scope API key.
+
+<Info>
+  **Base URL:** `https://api.nexoranode.xyz/v1`  
+  **Authentication:** `Authorization: Bearer {API_KEY}`
+</Info>
+
+---
+
+## Get Usage
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/usage`
+</div>
+
+Returns time-series usage data for your account over a specified date range. Each data point represents an aggregated bucket of requests at the specified `granularity`. Useful for building dashboards, alerting pipelines, or billing reconciliation tooling.
+
+### Query Parameters
+
+<ParamField query="from" type="string" required>
+  Start of the query window as an ISO 8601 date string (e.g. `2024-06-01`). Inclusive.
+</ParamField>
+
+<ParamField query="to" type="string" required>
+  End of the query window as an ISO 8601 date string (e.g. `2024-06-03`). Inclusive.
+</ParamField>
+
+<ParamField query="granularity" type="string" default="day">
+  Time bucket size for aggregation. One of:
+  - `hour` — one data point per hour
+  - `day` — one data point per calendar day *(default)*
+  - `week` — one data point per ISO week
+
+  Note: `hour` granularity is only available for date ranges ≤ 7 days.
+</ParamField>
+
+<ParamField query="network" type="string">
+  Filter results to a single network by its slug (e.g. `ethereum-mainnet`). Omit to aggregate across all networks.
+</ParamField>
+
+<ParamField query="api_key_id" type="string">
+  Filter results to requests made with a specific API key ID. Omit to aggregate across all keys on the account.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Usage data point">
+    <ResponseField name="timestamp" type="string">
+      ISO 8601 timestamp marking the start of the time bucket (e.g. `2024-06-01T00:00:00Z` for a day bucket).
+    </ResponseField>
+    <ResponseField name="requests" type="integer">
+      Total number of RPC requests received during this bucket.
+    </ResponseField>
+    <ResponseField name="errors" type="integer">
+      Number of requests that returned a 4xx or 5xx error.
+    </ResponseField>
+    <ResponseField name="error_rate" type="number">
+      Fraction of requests that resulted in an error (e.g. `0.012` = 1.2%). Expressed as a float between `0` and `1`.
+    </ResponseField>
+    <ResponseField name="p50_latency_ms" type="integer">
+      Median (50th percentile) response latency in milliseconds for this bucket.
+    </ResponseField>
+    <ResponseField name="p95_latency_ms" type="integer">
+      95th percentile response latency in milliseconds — a useful indicator of tail latency.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  <Expandable title="Metadata">
+    <ResponseField name="total" type="integer">
+      Total number of data point buckets returned.
+    </ResponseField>
+    <ResponseField name="page" type="integer">
+      Current page number.
+    </ResponseField>
+    <ResponseField name="per_page" type="integer">
+      Number of buckets per page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "data": [
+    {
+      "timestamp": "2024-06-01T00:00:00Z",
+      "requests": 1042817,
+      "errors": 3129,
+      "error_rate": 0.003,
+      "p50_latency_ms": 42,
+      "p95_latency_ms": 187
+    },
+    {
+      "timestamp": "2024-06-02T00:00:00Z",
+      "requests": 987634,
+      "errors": 1481,
+      "error_rate": 0.0015,
+      "p50_latency_ms": 39,
+      "p95_latency_ms": 172
+    },
+    {
+      "timestamp": "2024-06-03T00:00:00Z",
+      "requests": 1134200,
+      "errors": 5671,
+      "error_rate": 0.005,
+      "p50_latency_ms": 45,
+      "p95_latency_ms": 210
+    }
+  ],
+  "meta": {
+    "total": 3,
+    "page": 1,
+    "per_page": 20
+  }
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/usage?from=2024-06-01&to=2024-06-03&granularity=day" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Get Usage Summary
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/usage/summary`
+</div>
+
+Returns a real-time snapshot of your account's quota consumption for the current billing period. Use this endpoint to monitor how close you are to your plan's monthly request limit and detect overage before it occurs.
+
+### Query Parameters
+
+No required parameters. The summary is always scoped to the **current billing period** for the authenticated account.
+
+### Response
+
+<ResponseField name="billing_period_start" type="string">
+  ISO 8601 timestamp for the start of the current billing period.
+</ResponseField>
+
+<ResponseField name="billing_period_end" type="string">
+  ISO 8601 timestamp for the end of the current billing period.
+</ResponseField>
+
+<ResponseField name="requests_used" type="integer">
+  Total number of requests consumed so far this billing period.
+</ResponseField>
+
+<ResponseField name="requests_limit" type="integer">
+  Maximum number of requests included in your current plan. `null` for plans with unlimited requests.
+</ResponseField>
+
+<ResponseField name="requests_remaining" type="integer">
+  Number of requests remaining before your plan limit is reached. `null` for unlimited plans.
+</ResponseField>
+
+<ResponseField name="overage_requests" type="integer">
+  Number of requests consumed beyond the plan limit this period. `0` if you have not exceeded your limit.
+</ResponseField>
+
+<ResponseField name="plan" type="string">
+  The name of your active NexoraNode plan (e.g. `"Growth"`, `"Scale"`, `"Enterprise"`).
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "billing_period_start": "2024-06-01T00:00:00Z",
+  "billing_period_end": "2024-06-30T23:59:59Z",
+  "requests_used": 28450320,
+  "requests_limit": 50000000,
+  "requests_remaining": 21549680,
+  "overage_requests": 0,
+  "plan": "Growth"
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/usage/summary" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+<Tip>
+  Combine `/v1/usage/summary` with a [webhook on `usage.threshold_reached`](/api-reference/webhooks) to receive an automatic notification when your quota reaches a configured percentage — rather than polling this endpoint repeatedly.
+</Tip>
+
+---
+
+## Error Responses
+
+```json
+{
+  "error": {
+    "code": "INVALID_DATE_RANGE",
+    "message": "The 'from' date must be before the 'to' date.",
+    "status": 400
+  }
+}
+```
+
+| HTTP Status | Code | Description |
+|-------------|------|-------------|
+| `400` | `MISSING_REQUIRED_PARAM` | `from` or `to` was not provided. |
+| `400` | `INVALID_DATE_RANGE` | `from` is after `to`, or the range exceeds the maximum allowed window. |
+| `400` | `INVALID_GRANULARITY` | `granularity` must be `hour`, `day`, or `week`. |
+| `400` | `HOURLY_RANGE_TOO_LARGE` | `hour` granularity is only available for date ranges ≤ 7 days. |
+| `401` | `UNAUTHORIZED` | Missing or invalid API key. |
+| `429` | `RATE_LIMITED` | Too many requests. Check the `Retry-After` response header. |

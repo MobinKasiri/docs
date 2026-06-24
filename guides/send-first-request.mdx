@@ -1,0 +1,127 @@
+---
+title: "Send Your First Blockchain RPC Request"
+sidebarTitle: "First Request"
+description: "Make a live JSON-RPC call to an Ethereum node using your NexoraNode endpoint with curl, Python, or JavaScript examples."
+---
+
+In this guide, you'll make a live `eth_blockNumber` call to an Ethereum node through your NexoraNode endpoint. By the end, you'll have a working RPC request returning the latest Ethereum block number — and a pattern you can reuse for any supported JSON-RPC method.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- A NexoraNode **API key** — see [Getting Your API Key](/getting-started/api-keys) if you haven't created one yet.
+- The **network slug** for the chain you want to query — see [Supported Networks](/concepts/networks) for the full list. This guide uses `ethereum`.
+
+## Making Your First Request
+
+Your HTTP RPC endpoint follows this format:
+
+```
+POST https://rpc.nexoranode.xyz/{API_KEY}/{network-slug}
+```
+
+Replace `{API_KEY}` with your key (e.g. `nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`) and `{network-slug}` with the target network (e.g. `ethereum`).
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl --request POST \
+      --url https://rpc.nexoranode.xyz/nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6/ethereum \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "jsonrpc": "2.0",
+        "method": "eth_blockNumber",
+        "params": [],
+        "id": 1
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    API_KEY = "nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+    NETWORK = "ethereum"
+
+    url = f"https://rpc.nexoranode.xyz/{API_KEY}/{NETWORK}"
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "eth_blockNumber",
+        "params": [],
+        "id": 1
+    }
+
+    response = requests.post(url, json=payload)
+    data = response.json()
+
+    print(data)
+    # {'jsonrpc': '2.0', 'id': 1, 'result': '0x12a3f9c'}
+
+    # Convert hex result to integer
+    block_number = int(data["result"], 16)
+    print(f"Latest block: {block_number}")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const API_KEY = "nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+    const NETWORK = "ethereum";
+
+    const response = await fetch(
+      `https://rpc.nexoranode.xyz/${API_KEY}/${NETWORK}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "eth_blockNumber",
+          params: [],
+          id: 1,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    console.log(data);
+    // { jsonrpc: '2.0', id: 1, result: '0x12a3f9c' }
+
+    // Convert hex result to integer
+    const blockNumber = parseInt(data.result, 16);
+    console.log(`Latest block: ${blockNumber}`);
+    ```
+  </Tab>
+</Tabs>
+
+### Expected Response
+
+All three examples return the same JSON-RPC response envelope:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "0x12a3f9c"
+}
+```
+
+<Note>
+  The `result` field is a **hexadecimal string**. Convert it to a decimal integer using `parseInt(result, 16)` in JavaScript or `int(result, 16)` in Python. In the example above, `0x12a3f9c` equals block **19,513,244**.
+</Note>
+
+## Common RPC Methods
+
+NexoraNode passes through all standard JSON-RPC methods that the underlying network supports. Here are the most frequently used Ethereum methods to get you started:
+
+| Method | Description | Example Params |
+|---|---|---|
+| `eth_blockNumber` | Returns the number of the most recent block | `[]` |
+| `eth_getBalance` | Returns the ETH balance of an address at a given block | `["0xAddress", "latest"]` |
+| `eth_call` | Executes a read-only smart contract call without submitting a transaction | `[{"to": "0xContract", "data": "0xCalldata"}, "latest"]` |
+| `eth_getTransactionByHash` | Returns transaction details for a given transaction hash | `["0xTxHash"]` |
+| `eth_getLogs` | Returns an array of logs matching a filter object | `[{"fromBlock": "0x0", "toBlock": "latest", "address": "0xContract"}]` |
+
+<Tip>
+  Ready to move beyond polling? Use **WebSocket subscriptions** to receive new blocks and events in real time without repeatedly calling `eth_blockNumber`. See [Real-Time Data with WebSocket Subscriptions](/guides/websocket-connections).
+</Tip>

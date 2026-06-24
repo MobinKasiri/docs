@@ -1,0 +1,94 @@
+---
+title: "Monitor Usage and Node Health in Your Dashboard"
+sidebarTitle: "Monitoring"
+description: "Use the NexoraNode analytics dashboard to track request volume, error rates, latency percentiles, and monthly quota consumption."
+---
+
+NexoraNode provides built-in analytics at [app.nexoranode.xyz](https://app.nexoranode.xyz) so you can understand how your application uses the platform, diagnose errors, and stay ahead of quota limits — no external monitoring setup required. This guide walks you through the available dashboards, alert options, and programmatic access to usage data.
+
+## Usage Dashboard
+
+The **Analytics** dashboard gives you a high-level view of your traffic patterns across all networks and API keys.
+
+**Navigate to:** Dashboard → Analytics
+
+| Chart | Description |
+|---|---|
+| **Requests per Hour** | Bar chart of total RPC calls bucketed by hour |
+| **Requests per Day** | Daily aggregated request totals for trend analysis |
+| **Requests by Network** | Pie/bar breakdown of request volume per network slug (e.g. `ethereum`, `polygon`) |
+| **Error Rate** | Percentage of requests that returned a non-`200` response over time |
+| **p50 Latency** | Median response time for your requests in milliseconds |
+| **p95 Latency** | 95th-percentile response time — useful for identifying tail latency spikes |
+
+**Filter options:**
+
+- **Time range:** `1h` · `24h` · `7d` · `30d`
+- **API key:** Isolate traffic from a specific key to debug a particular service or environment
+- **Network:** Focus the view on a single blockchain network
+
+<Tip>
+  You can export any chart's underlying data as a **CSV file**. Click the **⋮** menu in the top-right corner of any chart and select **Export as CSV** to download a time-series dataset for use in spreadsheets or external BI tools.
+</Tip>
+
+## Error Rate Monitoring
+
+The **Error Rate** panel shows the percentage of your requests that failed during the selected time window. Failed requests are those that returned an HTTP error status (`4xx` or `5xx`).
+
+Below the overall error rate percentage, you'll find a **breakdown by error code**:
+
+| Error Code | Meaning |
+|---|---|
+| `429` | Rate limit exceeded — your application sent requests faster than your plan allows |
+| `401` | Unauthorized — the API key in the request is invalid or has been revoked |
+| `404` | Unknown network — the network slug in the URL doesn't match a supported network |
+| `500` | Internal server error — a transient upstream node issue |
+| `503` | Service unavailable — the target node is temporarily unreachable |
+
+Monitoring the breakdown by error code helps you quickly distinguish between application-level issues (e.g. a misconfigured key) and infrastructure-level events (e.g. a brief node outage).
+
+## Webhook Alerts
+
+You can configure NexoraNode to send an HTTP `POST` to a URL of your choice when your usage crosses defined thresholds — for example, when your error rate exceeds 5%, or when you've consumed 80% of your monthly quota.
+
+**Navigate to:** Dashboard → Alerts → New Webhook
+
+Available alert triggers include:
+
+- **Usage threshold:** Fire when requests in a rolling window exceed a set number
+- **Error rate threshold:** Fire when the error rate exceeds a set percentage
+- **Quota warning:** Fire at 50%, 80%, or 90% of monthly quota consumption
+- **Node health event:** Fire when NexoraNode detects degraded performance on a network
+
+For full webhook payload schemas and configuration options, see the [Webhooks API Reference](/api-reference/webhooks).
+
+## Usage API
+
+If you need to integrate NexoraNode usage data into your own dashboards, billing systems, or alerting pipelines, you can query it programmatically via the Usage API.
+
+| Endpoint | Description |
+|---|---|
+| `GET /v1/usage` | Returns paginated, time-series request and error counts for a given time range and optional filters (API key, network) |
+| `GET /v1/usage/summary` | Returns aggregated totals for the current billing period — total requests, error count, and quota remaining |
+
+**Example: fetching a usage summary**
+
+```bash
+curl --request GET \
+  --url https://api.nexoranode.xyz/v1/usage/summary \
+  --header 'Authorization: Bearer nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
+```
+
+```json
+{
+  "period_start": "2024-06-01T00:00:00Z",
+  "period_end": "2024-06-30T23:59:59Z",
+  "total_requests": 1482301,
+  "total_errors": 3204,
+  "error_rate_percent": 0.22,
+  "quota_limit": 5000000,
+  "quota_remaining": 3517699
+}
+```
+
+For full request parameters, response schemas, and authentication details, see the [Usage API Reference](/api-reference/usage).

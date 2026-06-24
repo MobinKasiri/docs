@@ -1,0 +1,74 @@
+---
+title: "NexoraNode Plans and Pricing Overview"
+sidebarTitle: "Plans"
+description: "Compare NexoraNode Free, Pro, and Enterprise plans to find the right level of throughput, node access, and support for your project."
+---
+
+NexoraNode offers **three plans** designed to grow with your project — from initial prototyping all the way to high-throughput production systems. Each plan is differentiated by monthly request volume, rate limits, node type, and the level of support you receive.
+
+## Plan Comparison
+
+| Feature | Free | Pro | Enterprise |
+|---|---|---|---|
+| **Monthly Price** | $0 | $49 | Custom |
+| **Requests / Month** | 1,000,000 | 25,000,000 | Unlimited |
+| **Rate Limit** | 10 req/s | 100 req/s | Custom |
+| **Node Type** | Shared | Shared | Dedicated |
+| **Archive Data Access** | ❌ | ❌ | ✅ |
+| **Webhooks** | ❌ | ✅ | ✅ |
+| **Support** | Community forum | Email (24 h response) | Priority SLA (4 h response) |
+
+<CardGroup cols={3}>
+  <Card title="Free" icon="seedling">
+    Perfect for **side projects, prototypes, and learning**. No credit card required — create an account and start making requests immediately.
+  </Card>
+  <Card title="Pro" icon="bolt">
+    Built for **growing applications and production workloads** that need higher throughput, webhooks, and reliable email support.
+  </Card>
+  <Card title="Enterprise" icon="building">
+    For **mission-critical systems** that demand dedicated infrastructure, archive access, custom rate limits, and a priority support SLA.
+  </Card>
+</CardGroup>
+
+## Overage Policy
+
+How NexoraNode handles requests beyond your monthly quota depends on your plan:
+
+- **Free plan** — Requests are **blocked** once you reach your 1,000,000 monthly limit. Your endpoint returns a `429 Too Many Requests` error until your quota resets at the start of the next billing cycle. To avoid interruption, upgrade to Pro.
+
+- **Pro plan** — Requests beyond your 25,000,000 monthly allotment are charged at **$0.0000015 per request** (i.e., $1.50 per 1,000,000 additional requests). Overage billing appears on your next invoice. You can set a spending cap in the dashboard to prevent unexpected charges.
+
+- **Enterprise plan** — Requests are **unlimited**. There are no hard caps and no overage charges — your rate limit and infrastructure capacity are negotiated as part of your contract.
+
+<Note>
+  Overage pricing is subject to change. Always refer to [nexoranode.xyz/pricing](https://nexoranode.xyz/pricing) for the current rates before building billing assumptions into your application.
+</Note>
+
+## Upgrading Your Plan
+
+Upgrading takes effect **immediately** — you gain access to higher rate limits and new features the moment the upgrade is processed.
+
+<Steps>
+  <Step title="Open the Dashboard">
+    Log in to your account at [app.nexoranode.xyz](https://app.nexoranode.xyz).
+  </Step>
+  <Step title="Navigate to Billing">
+    In the left sidebar, click **Billing**.
+  </Step>
+  <Step title="Select a Plan">
+    Click **Upgrade** next to the plan you want, review the pricing summary, and confirm.
+  </Step>
+  <Step title="Start Using Your New Limits">
+    Your new rate limits and features are active immediately. No endpoint URL changes are required.
+  </Step>
+</Steps>
+
+To inquire about an **Enterprise contract**, click **Contact Sales** on the Billing page or email [sales@nexoranode.xyz](mailto:sales@nexoranode.xyz).
+
+<Note>
+  Pricing details, including any promotional rates or annual discount options, are maintained at [nexoranode.xyz/pricing](https://nexoranode.xyz/pricing). The figures on this page reflect standard list pricing.
+</Note>
+
+<Tip>
+  Have questions about invoices, payment methods, or plan changes? Visit the [Billing FAQ](/support/faq) for answers to the most common billing questions.
+</Tip>

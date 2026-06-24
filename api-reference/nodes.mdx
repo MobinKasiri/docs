@@ -1,0 +1,340 @@
+---
+title: "Nodes API — Create, List, and Manage Endpoints"
+sidebarTitle: "Nodes"
+description: "REST API reference for NexoraNode management endpoints. Create nodes, list active endpoints, and delete nodes programmatically."
+---
+
+The Nodes API lets you programmatically manage your RPC endpoints — spinning up new nodes, inspecting their status and usage metrics, and tearing them down when no longer needed. All endpoints require a full-scope API key passed as a Bearer token in the `Authorization` header.
+
+<Info>
+  **Base URL:** `https://api.nexoranode.xyz/v1`  
+  **Authentication:** `Authorization: Bearer {API_KEY}`
+</Info>
+
+---
+
+## List Nodes
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/nodes`
+</div>
+
+Returns a paginated list of all nodes in your account. Use the query parameters to filter by network or control pagination.
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number to retrieve. Starts at `1`.
+</ParamField>
+
+<ParamField query="per_page" type="integer" default="20">
+  Number of results per page. Maximum value is `100`.
+</ParamField>
+
+<ParamField query="network" type="string">
+  Filter nodes by network slug (e.g. `ethereum-mainnet`). Returns only nodes attached to the specified network.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Node object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the node.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable label assigned to the node.
+    </ResponseField>
+    <ResponseField name="network" type="string">
+      Network slug the node is connected to (e.g. `ethereum-mainnet`).
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Node tier — either `shared` or `dedicated`.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current state of the node: `active`, `provisioning`, or `paused`.
+    </ResponseField>
+    <ResponseField name="endpoint_url" type="string">
+      HTTPS RPC endpoint URL for this node.
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of when the node was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  <Expandable title="Pagination metadata">
+    <ResponseField name="total" type="integer">
+      Total number of nodes matching the query.
+    </ResponseField>
+    <ResponseField name="page" type="integer">
+      Current page number.
+    </ResponseField>
+    <ResponseField name="per_page" type="integer">
+      Number of results returned per page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "data": [
+    {
+      "id": "node_01hx9k2mq3fvt8pzj7ybcn4ew",
+      "name": "Production ETH Node",
+      "network": "ethereum-mainnet",
+      "type": "dedicated",
+      "status": "active",
+      "endpoint_url": "https://eth-mainnet.nexoranode.xyz/v1/rpc/node_01hx9k2mq3fvt8pzj7ybcn4ew",
+      "created_at": "2024-03-12T08:22:10Z"
+    },
+    {
+      "id": "node_02jy7n4pr5gwu9qak8zcdn5fx",
+      "name": "Staging Polygon Node",
+      "network": "polygon-mainnet",
+      "type": "shared",
+      "status": "active",
+      "endpoint_url": "https://polygon-mainnet.nexoranode.xyz/v1/rpc/node_02jy7n4pr5gwu9qak8zcdn5fx",
+      "created_at": "2024-04-01T14:05:33Z"
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "page": 1,
+    "per_page": 20
+  }
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/nodes?page=1&per_page=20" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Create Node
+
+<div className="api-method">
+  <span className="method post">POST</span> `/v1/nodes`
+</div>
+
+Provisions a new RPC node. The node is created immediately and enters `provisioning` status while infrastructure is being set up. Once ready, the status transitions to `active` — this typically takes 30–90 seconds for shared nodes and up to 5 minutes for dedicated nodes.
+
+### Body Parameters
+
+<ParamField body="name" type="string" required>
+  A human-readable label for the node (e.g. `"Production ETH Node"`). Must be between 1 and 64 characters.
+</ParamField>
+
+<ParamField body="network" type="string" required>
+  The network slug to connect the node to (e.g. `ethereum-mainnet`). Retrieve available slugs from the [Networks API](/api-reference/networks).
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Node tier to provision. One of:
+  - `shared` — Shared infrastructure, suitable for development and moderate traffic.
+  - `dedicated` — Isolated infrastructure, recommended for production workloads.
+</ParamField>
+
+### Response
+
+Returns the newly created node object. The `status` field will be `provisioning` until the node is ready.
+
+<ResponseField name="id" type="string">
+  Unique identifier for the newly created node.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Label assigned to the node.
+</ResponseField>
+
+<ResponseField name="network" type="string">
+  Network slug the node is attached to.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Node tier — `shared` or `dedicated`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Will be `provisioning` immediately after creation.
+</ResponseField>
+
+<ResponseField name="endpoint_url" type="string">
+  The RPC endpoint URL. This URL is available immediately but will only respond once `status` transitions to `active`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of node creation.
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "id": "node_03kz8p5qs6hxv0rbm9aden6gy",
+  "name": "Arbitrum Analytics Node",
+  "network": "arbitrum-mainnet",
+  "type": "dedicated",
+  "status": "provisioning",
+  "endpoint_url": "https://arbitrum-mainnet.nexoranode.xyz/v1/rpc/node_03kz8p5qs6hxv0rbm9aden6gy",
+  "created_at": "2024-06-18T11:47:02Z"
+}
+```
+
+```bash cURL
+curl --request POST \
+  --url "https://api.nexoranode.xyz/v1/nodes" \
+  --header "Authorization: Bearer {API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Arbitrum Analytics Node",
+    "network": "arbitrum-mainnet",
+    "type": "dedicated"
+  }'
+```
+</CodeGroup>
+
+---
+
+## Get Node
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/nodes/{nodeId}`
+</div>
+
+Retrieves a single node by its ID, including real-time usage counters and the timestamp of the most recent request.
+
+### Path Parameters
+
+<ParamField path="nodeId" type="string" required>
+  The unique identifier of the node to retrieve (e.g. `node_01hx9k2mq3fvt8pzj7ybcn4ew`).
+</ParamField>
+
+### Response
+
+Returns the full node object with additional usage fields.
+
+<ResponseField name="id" type="string">
+  Unique identifier of the node.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable label for the node.
+</ResponseField>
+
+<ResponseField name="network" type="string">
+  Network slug the node is connected to.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Node tier — `shared` or `dedicated`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current state: `active`, `provisioning`, or `paused`.
+</ResponseField>
+
+<ResponseField name="endpoint_url" type="string">
+  HTTPS RPC endpoint URL for this node.
+</ResponseField>
+
+<ResponseField name="request_count_total" type="integer">
+  Total number of RPC requests served by this node since creation.
+</ResponseField>
+
+<ResponseField name="request_count_today" type="integer">
+  Number of RPC requests served today (resets at UTC midnight).
+</ResponseField>
+
+<ResponseField name="last_active_at" type="string">
+  ISO 8601 timestamp of the most recent request received by this node. `null` if the node has never received a request.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the node was created.
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "id": "node_01hx9k2mq3fvt8pzj7ybcn4ew",
+  "name": "Production ETH Node",
+  "network": "ethereum-mainnet",
+  "type": "dedicated",
+  "status": "active",
+  "endpoint_url": "https://eth-mainnet.nexoranode.xyz/v1/rpc/node_01hx9k2mq3fvt8pzj7ybcn4ew",
+  "request_count_total": 4821903,
+  "request_count_today": 138204,
+  "last_active_at": "2024-06-18T11:59:55Z",
+  "created_at": "2024-03-12T08:22:10Z"
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/nodes/node_01hx9k2mq3fvt8pzj7ybcn4ew" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Delete Node
+
+<div className="api-method">
+  <span className="method delete">DELETE</span> `/v1/nodes/{nodeId}`
+</div>
+
+Permanently deletes a node and deprovisions its underlying infrastructure. The node's RPC endpoint becomes unreachable immediately. **This action is irreversible.**
+
+<Warning>
+  Deleting a node cannot be undone. Any application traffic routed to the node's `endpoint_url` will receive connection errors after deletion.
+</Warning>
+
+### Path Parameters
+
+<ParamField path="nodeId" type="string" required>
+  The unique identifier of the node to delete (e.g. `node_01hx9k2mq3fvt8pzj7ybcn4ew`).
+</ParamField>
+
+### Response
+
+Returns `204 No Content` with an empty body on success.
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url "https://api.nexoranode.xyz/v1/nodes/node_01hx9k2mq3fvt8pzj7ybcn4ew" \
+  --header "Authorization: Bearer {API_KEY}"
+```
+</CodeGroup>
+
+---
+
+## Error Responses
+
+All Nodes API errors follow the standard NexoraNode error envelope:
+
+```json
+{
+  "error": {
+    "code": "NODE_NOT_FOUND",
+    "message": "No node was found with the provided ID.",
+    "status": 404
+  }
+}
+```
+
+| HTTP Status | Code | Description |
+|-------------|------|-------------|
+| `400` | `INVALID_NETWORK` | The specified network slug does not exist or is not available. |
+| `400` | `INVALID_NODE_TYPE` | The `type` field must be `shared` or `dedicated`. |
+| `401` | `UNAUTHORIZED` | Missing or invalid API key. |
+| `403` | `FORBIDDEN` | Your plan does not permit the requested node tier or count. |
+| `404` | `NODE_NOT_FOUND` | No node exists with the given `nodeId`. |
+| `429` | `RATE_LIMITED` | Too many requests. Check the `Retry-After` response header. |

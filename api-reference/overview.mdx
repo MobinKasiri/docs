@@ -1,0 +1,98 @@
+---
+title: "NexoraNode REST API Reference Overview"
+sidebarTitle: "Overview"
+description: "Explore the NexoraNode management API to programmatically manage nodes, list networks, retrieve usage stats, and configure webhooks."
+---
+
+NexoraNode provides a RESTful management API in addition to its RPC endpoints, giving you full programmatic control over your blockchain infrastructure. Use the management API to provision and configure nodes, explore supported networks, monitor usage metrics, and set up event-driven webhooks — all from your own applications or CI/CD pipelines.
+
+## Base URL
+
+All management API requests are made to the following base URL:
+
+```
+https://api.nexoranode.xyz/v1
+```
+
+## Two API Surfaces
+
+NexoraNode exposes two distinct API surfaces, each designed for a different purpose:
+
+| Surface | Base URL | Purpose |
+|---|---|---|
+| **RPC Endpoints** | `https://rpc.nexoranode.xyz/{API_KEY}/{network-slug}` | Send JSON-RPC calls directly to blockchain nodes (e.g. `eth_blockNumber`, `eth_sendRawTransaction`) |
+| **Management API** | `https://api.nexoranode.xyz/v1` | Manage nodes, list supported networks, retrieve usage statistics, and configure webhooks |
+
+RPC endpoints are accessed over standard JSON-RPC and WebSocket protocols and do not require a `Bearer` token — authentication is embedded in the URL path. The management API is a conventional REST API secured with Bearer token authentication.
+
+<Note>
+  The management API requires an API key with **full** scope. Keys scoped to `rpc` only will be rejected with a `403 Forbidden` response. See [Authentication](/api-reference/authentication) for details.
+</Note>
+
+## Request Format
+
+All management API requests must include the following headers:
+
+- **`Content-Type: application/json`** — required for all requests with a body
+- **`Authorization: Bearer <API_KEY>`** — required for all management API requests
+
+Below is an example request retrieving the list of supported networks:
+
+```bash
+curl https://api.nexoranode.xyz/v1/networks \
+  -H "Authorization: Bearer nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+```
+
+For requests that include a body (e.g. `POST` or `PATCH`), always set `Content-Type: application/json` and provide a valid JSON payload:
+
+```bash
+curl -X POST https://api.nexoranode.xyz/v1/nodes \
+  -H "Authorization: Bearer nx_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6" \
+  -H "Content-Type: application/json" \
+  -d '{"network": "ethereum-mainnet", "plan": "standard"}'
+```
+
+## Response Format
+
+The management API returns standard HTTP status codes. `2xx` responses indicate success; `4xx` and `5xx` responses indicate client or server errors respectively. See [Errors](/api-reference/errors) for a full breakdown.
+
+**List responses** are wrapped in a consistent envelope containing a `data` array and a `meta` object with pagination details:
+
+```json
+{
+  "data": [
+    {
+      "id": "node_01hxyz123abc",
+      "network": "ethereum-mainnet",
+      "status": "active",
+      "created_at": "2024-06-01T12:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 42,
+    "page": 1,
+    "per_page": 20
+  }
+}
+```
+
+**Singular responses** (e.g. `GET /v1/nodes/:id`) return the resource object directly without a `data` wrapper.
+
+**Error responses** always follow the shape `{ "error": { "code", "message", "status" } }`. Refer to the [Errors](/api-reference/errors) reference for the full list of error codes and recommended retry strategies.
+
+## Available Resources
+
+<CardGroup cols={2}>
+  <Card title="Nodes" icon="server" href="/api-reference/nodes">
+    Provision, configure, pause, and delete your managed blockchain nodes.
+  </Card>
+  <Card title="Networks" icon="network-wired" href="/api-reference/networks">
+    List all supported blockchain networks and their current status.
+  </Card>
+  <Card title="Usage" icon="chart-bar" href="/api-reference/usage">
+    Retrieve request counts, bandwidth metrics, and monthly quota usage.
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api-reference/webhooks">
+    Configure webhook endpoints to receive real-time event notifications.
+  </Card>
+</CardGroup>

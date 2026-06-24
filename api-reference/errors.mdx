@@ -1,0 +1,186 @@
+---
+title: "NexoraNode API Error Codes and Responses"
+sidebarTitle: "Errors"
+description: "Understand NexoraNode HTTP error codes, JSON error body format, and how to implement retry logic for transient failures."
+---
+
+The NexoraNode management API uses standard HTTP status codes to indicate the success or failure of a request. Every error response — regardless of cause — returns a consistent JSON body containing a machine-readable `code`, a human-readable `message`, and the numeric HTTP `status`. This makes it straightforward to handle errors programmatically without parsing free-form text.
+
+## Error Response Format
+
+All error responses share the following JSON structure:
+
+```json
+{
+  "error": {
+    "code": "rate_limit_exceeded",
+    "message": "You have exceeded the request rate limit. Please slow down and retry after the reset window.",
+    "status": 429
+  }
+}
+```
+
+<ResponseField name="error" type="object" required>
+  The top-level error container.
+
+  <Expandable title="error fields">
+    <ResponseField name="error.code" type="string" required>
+      A stable, snake_case identifier for the error type. Use this field for programmatic error handling — the `message` field may change without notice.
+    </ResponseField>
+    <ResponseField name="error.message" type="string" required>
+      A human-readable description of what went wrong. Suitable for logging and debugging, but not guaranteed to be stable across API versions.
+    </ResponseField>
+    <ResponseField name="error.status" type="integer" required>
+      The HTTP status code, mirrored inside the body for convenience when the HTTP layer is abstracted away.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## HTTP Status Codes
+
+| Status | Name | When It Occurs |
+|---|---|---|
+| `400` | Bad Request | The request body or query parameters are malformed, missing required fields, or contain invalid values. |
+| `401` | Unauthorized | No API key was provided, or the provided key is invalid or has been revoked. |
+| `403` | Forbidden | The API key is valid but does not have the required scope to access this resource (e.g. using an `rpc`-scoped key with the management API). |
+| `404` | Not Found | The requested resource does not exist, or the URL path is incorrect. |
+| `429` | Too Many Requests | You have exceeded the per-second or per-minute request rate limit for your plan. Retry after the window indicated by the `X-RateLimit-Reset` header. |
+| `500` | Internal Server Error | An unexpected error occurred on the NexoraNode side. These are rare; check the [status page](https://status.nexoranode.xyz) if the issue persists. |
+| `503` | Service Unavailable | The service is temporarily unavailable due to maintenance or a transient overload condition. Retry with exponential backoff. |
+
+## Error Codes
+
+The following `code` values may appear in the `error.code` field. Match against these strings in your error-handling logic.
+
+| Code | HTTP Status | Description |
+|---|---|---|
+| `invalid_api_key` | `401` | The API key is missing, malformed (does not match the `nx_` prefix format), expired, or has been revoked. |
+| `insufficient_scope` | `403` | The API key exists and is valid, but its scope (`rpc`) does not permit access to this management API endpoint. A `full`-scoped key is required. |
+| `rate_limit_exceeded` | `429` | The per-second or per-minute request rate limit for your plan has been exceeded. Check the `X-RateLimit-Reset` response header for the UNIX timestamp at which your quota resets. |
+| `monthly_limit_exceeded` | `429` | Your account has consumed its monthly request quota. Upgrade your plan or wait for the quota to reset at the start of the next billing cycle. |
+| `resource_not_found` | `404` | The specified resource (node, webhook, etc.) does not exist, or does not belong to your account. |
+| `invalid_request` | `400` | The request body is syntactically valid JSON but contains invalid field values, missing required properties, or otherwise fails schema validation. The `message` field will describe the specific issue. |
+| `node_unavailable` | `503` | The target node is temporarily unreachable or is undergoing maintenance. RPC requests to that node should be retried. |
+| `network_not_supported` | `400` | The specified `network` slug is not recognised or is not currently available on the NexoraNode platform. Fetch `/v1/networks` for the current list of supported networks. |
+
+<Info>
+  `monthly_limit_exceeded` shares the `429` HTTP status code with `rate_limit_exceeded` because both signal that the caller should pause and retry (or upgrade). Distinguish between them using the `error.code` field.
+</Info>
+
+## Retry Strategy
+
+Not all errors are permanent. The `429 Too Many Requests` and `503 Service Unavailable` status codes indicate **transient** failures that may resolve on their own. You should implement automatic retries with **exponential backoff and jitter** for these two codes.
+
+**Key principles:**
+
+- **Exponential backoff** — double the wait time between each successive retry to avoid thundering-herd behaviour.
+- **Jitter** — add a small random offset to each wait interval so that multiple clients retrying simultaneously do not synchronise their requests.
+- **`X-RateLimit-Reset` awareness** — for `429` responses, the `X-RateLimit-Reset` header contains a UNIX timestamp (seconds) indicating when your rate-limit window resets. Wait at least until that timestamp before retrying.
+- **Maximum retries** — always cap the number of retry attempts to avoid infinite loops.
+
+<Warning>
+  Do **not** retry `4xx` errors other than `429`. Errors like `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, and `404 Not Found` indicate problems with the request itself that will not resolve by retrying. Fix the underlying issue before trying again.
+</Warning>
+
+The following utility function implements this strategy in JavaScript:
+
+```javascript
+/**
+ * fetchWithBackoff — wraps the native fetch API with exponential backoff
+ * and jitter for transient NexoraNode API errors (429 and 503).
+ *
+ * @param {string} url        - The request URL
+ * @param {RequestInit} options - Standard fetch options (method, headers, body, …)
+ * @param {object} retryConfig  - Optional retry tuning parameters
+ * @returns {Promise<Response>} - Resolves with the first successful response
+ * @throws {Error}             - Throws after all retries are exhausted
+ */
+async function fetchWithBackoff(url, options = {}, retryConfig = {}) {
+  const {
+    maxRetries = 5,       // Maximum number of retry attempts
+    baseDelayMs = 500,    // Initial backoff delay in milliseconds
+    maxDelayMs = 30000,   // Cap the backoff delay at 30 seconds
+  } = retryConfig;
+
+  const RETRYABLE_STATUSES = new Set([429, 503]);
+
+  let attempt = 0;
+
+  while (attempt <= maxRetries) {
+    const response = await fetch(url, options);
+
+    // Success — return immediately
+    if (response.ok) {
+      return response;
+    }
+
+    // Non-retryable error — throw straight away, no point retrying
+    if (!RETRYABLE_STATUSES.has(response.status)) {
+      const errorBody = await response.json().catch(() => ({}));
+      const code = errorBody?.error?.code ?? "unknown_error";
+      const message = errorBody?.error?.message ?? response.statusText;
+      throw new Error(`NexoraNode API error [${code}] (HTTP ${response.status}): ${message}`);
+    }
+
+    // We've hit our retry limit — give up
+    if (attempt === maxRetries) {
+      const errorBody = await response.json().catch(() => ({}));
+      const code = errorBody?.error?.code ?? "unknown_error";
+      const message = errorBody?.error?.message ?? response.statusText;
+      throw new Error(
+        `NexoraNode API error [${code}] (HTTP ${response.status}) after ${maxRetries} retries: ${message}`
+      );
+    }
+
+    // --- Determine how long to wait before the next attempt ---
+
+    let delayMs;
+
+    if (response.status === 429) {
+      // Respect X-RateLimit-Reset if present (UNIX timestamp in seconds)
+      const resetHeader = response.headers.get("X-RateLimit-Reset");
+      if (resetHeader) {
+        const resetAt = parseInt(resetHeader, 10) * 1000; // convert to ms
+        const msUntilReset = resetAt - Date.now();
+        // Use the reset window, but never wait longer than maxDelayMs
+        delayMs = Math.min(Math.max(msUntilReset, 0), maxDelayMs);
+      } else {
+        // Fall back to exponential backoff if the header is absent
+        delayMs = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
+      }
+    } else {
+      // 503 — pure exponential backoff
+      delayMs = Math.min(baseDelayMs * 2 ** attempt, maxDelayMs);
+    }
+
+    // Add jitter: ±20% of the calculated delay
+    const jitter = delayMs * 0.2 * (Math.random() * 2 - 1);
+    const waitMs = Math.max(0, Math.round(delayMs + jitter));
+
+    console.warn(
+      `NexoraNode: received HTTP ${response.status} on attempt ${attempt + 1}/${maxRetries}. ` +
+        `Retrying in ${waitMs}ms…`
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    attempt++;
+  }
+}
+
+// --- Usage example ---
+
+const response = await fetchWithBackoff(
+  "https://api.nexoranode.xyz/v1/nodes",
+  {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${process.env.NEXORA_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+  },
+  { maxRetries: 5, baseDelayMs: 500 }
+);
+
+const { data, meta } = await response.json();
+console.log(`Retrieved ${meta.total} nodes.`, data);
+```

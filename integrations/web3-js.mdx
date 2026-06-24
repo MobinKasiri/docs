@@ -1,0 +1,127 @@
+---
+title: "Connect web3.js to NexoraNode RPC Endpoints"
+sidebarTitle: "web3.js"
+description: "Use web3.js v4 with NexoraNode to query Ethereum networks, interact with smart contracts, and subscribe to events via WebSocket."
+---
+
+web3.js connects to NexoraNode instantly — point either the HTTP or WebSocket provider at your NexoraNode endpoint URL and all `web3.eth.*` calls are automatically routed through your dedicated infrastructure. No additional configuration required.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install web3
+```
+
+```bash yarn
+yarn add web3
+```
+
+</CodeGroup>
+
+## HTTP Provider
+
+Use the HTTP provider for standard request/response calls such as reading account balances, querying blocks, and fetching transaction receipts. The HTTP transport is stateless and well-suited for server-side or serverless environments.
+
+```typescript
+import { Web3 } from "web3";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const web3 = new Web3(url);
+
+// Get the latest block number
+const blockNumber = await web3.eth.getBlockNumber();
+console.log("Latest block:", blockNumber.toString());
+
+// Get the ETH balance of an address (returned in wei)
+const WALLET_ADDRESS = "0xYourWalletAddressHere";
+const balanceWei = await web3.eth.getBalance(WALLET_ADDRESS);
+const balanceEth = web3.utils.fromWei(balanceWei, "ether");
+console.log("Balance (ETH):", balanceEth);
+```
+
+## WebSocket Provider
+
+Switch to the WebSocket provider when your application needs event-driven updates — such as streaming new block headers or monitoring pending transactions in real time. The WebSocket connection stays open, delivering data as soon as it is available.
+
+```typescript
+import { Web3 } from "web3";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const wsUrl = `wss://ws.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const web3 = new Web3(wsUrl);
+
+// Subscribe to new block headers
+const subscription = await web3.eth.subscribe("newBlockHeaders");
+
+subscription.on("data", (blockHeader) => {
+  console.log("New block number:", blockHeader.number?.toString());
+  console.log("Block hash:", blockHeader.hash);
+});
+
+subscription.on("error", (error) => {
+  console.error("Subscription error:", error);
+});
+
+// Unsubscribe when done
+// await subscription.unsubscribe();
+```
+
+## Contracts
+
+Instantiate `web3.eth.Contract` with a contract ABI and its on-chain address to call read methods. The provider you configured earlier handles all RPC communication automatically.
+
+```typescript
+import { Web3 } from "web3";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const web3 = new Web3(url);
+
+// Minimal ERC-20 ABI — only the methods you need
+const ERC20_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+] as const;
+
+const TOKEN_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // USDC
+const WALLET_ADDRESS = "0xYourWalletAddressHere";
+
+const tokenContract = new web3.eth.Contract(ERC20_ABI, TOKEN_ADDRESS);
+
+// Call a read-only (view) method
+const balance = await tokenContract.methods.balanceOf(WALLET_ADDRESS).call();
+const decimals = await tokenContract.methods.decimals().call();
+
+console.log("Raw balance:", balance.toString());
+console.log(
+  "Formatted balance:",
+  Number(balance) / Math.pow(10, Number(decimals))
+);
+```
+
+<Note>
+  All examples above use **web3.js v4** syntax. If you are on v1 or v2, the
+  `Web3` constructor import and some method signatures differ. In v1, import via
+  `const Web3 = require('web3')` and instantiate with `new Web3(url)`. The
+  `subscribe` API and contract call patterns also changed between major versions
+  — consult the [web3.js migration
+  guide](https://docs.web3js.org/guides/web3_upgrade_guide/) for details.
+</Note>

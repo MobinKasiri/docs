@@ -1,0 +1,179 @@
+---
+title: "Networks API — List Supported Blockchain Networks"
+sidebarTitle: "Networks"
+description: "GET /v1/networks — retrieve all blockchain networks available on NexoraNode with slugs, chain IDs, and endpoint URL templates."
+---
+
+The Networks endpoint returns all currently supported blockchain networks on the NexoraNode platform. Use this endpoint to discover available network slugs for use when creating nodes, as well as chain IDs, RPC/WebSocket URL templates, and whether dedicated node provisioning is available for each network. This endpoint is **publicly accessible** and does not require authentication.
+
+<Info>
+  **Base URL:** `https://api.nexoranode.xyz/v1`  
+  **Authentication:** None required — this is a public endpoint.
+</Info>
+
+---
+
+## List Networks
+
+<div className="api-method">
+  <span className="method get">GET</span> `/v1/networks`
+</div>
+
+Returns a list of all blockchain networks NexoraNode supports. Filter by network type or ecosystem using the query parameters below.
+
+### Query Parameters
+
+<ParamField query="type" type="string">
+  Filter by network type. Accepted values:
+  - `mainnet` — production networks only
+  - `testnet` — test networks only
+
+  Omit to return all network types.
+</ParamField>
+
+<ParamField query="ecosystem" type="string">
+  Filter by blockchain ecosystem. Examples: `evm`, `solana`, `cosmos`, `starknet`. Omit to return all ecosystems.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  <Expandable title="Network object">
+    <ResponseField name="id" type="string">
+      Unique internal identifier for the network.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable network name (e.g. `"Ethereum Mainnet"`).
+    </ResponseField>
+    <ResponseField name="slug" type="string">
+      URL-safe identifier used when creating nodes or filtering usage data (e.g. `ethereum-mainnet`).
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      `mainnet` or `testnet`.
+    </ResponseField>
+    <ResponseField name="ecosystem" type="string">
+      Blockchain ecosystem this network belongs to (e.g. `evm`, `solana`, `cosmos`).
+    </ResponseField>
+    <ResponseField name="chain_id" type="integer or null">
+      EVM chain ID as defined by [chainlist.org](https://chainlist.org). `null` for non-EVM networks.
+    </ResponseField>
+    <ResponseField name="rpc_url_template" type="string">
+      HTTPS RPC endpoint template. Replace `{NODE_ID}` with your node's `id` to construct the full URL.
+    </ResponseField>
+    <ResponseField name="ws_url_template" type="string">
+      WebSocket endpoint template. Replace `{NODE_ID}` with your node's `id` for full WebSocket access.
+    </ResponseField>
+    <ResponseField name="dedicated_available" type="boolean">
+      Whether dedicated node provisioning is available for this network. If `false`, only `shared` nodes can be created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  <Expandable title="Pagination metadata">
+    <ResponseField name="total" type="integer">
+      Total number of networks matching the query.
+    </ResponseField>
+    <ResponseField name="page" type="integer">
+      Current page number.
+    </ResponseField>
+    <ResponseField name="per_page" type="integer">
+      Number of results per page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+```json Example Response
+{
+  "data": [
+    {
+      "id": "net_ethereum_mainnet",
+      "name": "Ethereum Mainnet",
+      "slug": "ethereum-mainnet",
+      "type": "mainnet",
+      "ecosystem": "evm",
+      "chain_id": 1,
+      "rpc_url_template": "https://eth-mainnet.nexoranode.xyz/v1/rpc/{NODE_ID}",
+      "ws_url_template": "wss://eth-mainnet.nexoranode.xyz/v1/ws/{NODE_ID}",
+      "dedicated_available": true
+    },
+    {
+      "id": "net_polygon_mainnet",
+      "name": "Polygon Mainnet",
+      "slug": "polygon-mainnet",
+      "type": "mainnet",
+      "ecosystem": "evm",
+      "chain_id": 137,
+      "rpc_url_template": "https://polygon-mainnet.nexoranode.xyz/v1/rpc/{NODE_ID}",
+      "ws_url_template": "wss://polygon-mainnet.nexoranode.xyz/v1/ws/{NODE_ID}",
+      "dedicated_available": true
+    },
+    {
+      "id": "net_arbitrum_mainnet",
+      "name": "Arbitrum One",
+      "slug": "arbitrum-mainnet",
+      "type": "mainnet",
+      "ecosystem": "evm",
+      "chain_id": 42161,
+      "rpc_url_template": "https://arbitrum-mainnet.nexoranode.xyz/v1/rpc/{NODE_ID}",
+      "ws_url_template": "wss://arbitrum-mainnet.nexoranode.xyz/v1/ws/{NODE_ID}",
+      "dedicated_available": true
+    }
+  ],
+  "meta": {
+    "total": 3,
+    "page": 1,
+    "per_page": 20
+  }
+}
+```
+
+```bash cURL
+curl --request GET \
+  --url "https://api.nexoranode.xyz/v1/networks?type=mainnet&ecosystem=evm"
+```
+</CodeGroup>
+
+---
+
+## Using Network Slugs
+
+Once you have a list of available networks, pass the `slug` field directly as the `network` parameter when creating a node:
+
+```bash
+curl --request POST \
+  --url "https://api.nexoranode.xyz/v1/nodes" \
+  --header "Authorization: Bearer {API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "My Polygon Node",
+    "network": "polygon-mainnet",
+    "type": "shared"
+  }'
+```
+
+<Tip>
+  Cache the `/v1/networks` response in your application — the list changes infrequently. NexoraNode announces new network additions and removals via the [changelog](https://nexoranode.xyz/changelog).
+</Tip>
+
+---
+
+## Error Responses
+
+Errors from the Networks API follow the standard NexoraNode error envelope:
+
+```json
+{
+  "error": {
+    "code": "INVALID_FILTER",
+    "message": "The value provided for 'type' must be 'mainnet' or 'testnet'.",
+    "status": 400
+  }
+}
+```
+
+| HTTP Status | Code | Description |
+|-------------|------|-------------|
+| `400` | `INVALID_FILTER` | An unrecognized or invalid filter value was provided. |
+| `429` | `RATE_LIMITED` | Too many requests. Check the `Retry-After` response header. |

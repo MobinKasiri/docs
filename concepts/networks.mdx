@@ -1,0 +1,61 @@
+---
+title: "Supported Blockchain Networks on NexoraNode"
+sidebarTitle: "Networks"
+description: "Browse all blockchain networks supported by NexoraNode, including EVM mainnets, testnets, and Layer 2 solutions with their network slugs."
+---
+
+NexoraNode gives you a single, consistent RPC interface across **20+ networks** spanning EVM-compatible chains, Layer 2 solutions, and non-EVM ecosystems including Solana, NEAR, and Cosmos. You switch networks by changing the network slug in your endpoint URL — no SDK swaps, no new authentication, no extra configuration.
+
+## EVM-Compatible Networks
+
+All EVM networks below support the standard Ethereum JSON-RPC specification, including `eth_*`, `net_*`, and `web3_*` namespaces. Layer 2 networks additionally expose their own supplementary namespaces (e.g., `arb_*` on Arbitrum, `optimism_*` on Optimism).
+
+| Network | Slug | Type | Chain ID |
+|---|---|---|---|
+| Ethereum Mainnet | `ethereum` | Mainnet | `1` |
+| Ethereum Sepolia | `ethereum-sepolia` | Testnet | `11155111` |
+| Polygon | `polygon` | Mainnet | `137` |
+| Polygon Mumbai | `polygon-mumbai` | Testnet | `80001` |
+| Arbitrum One | `arbitrum` | Mainnet | `42161` |
+| Optimism | `optimism` | Mainnet | `10` |
+| Base | `base` | Mainnet | `8453` |
+| Avalanche C-Chain | `avalanche` | Mainnet | `43114` |
+| BNB Smart Chain | `bsc` | Mainnet | `56` |
+
+## Other Networks
+
+The following non-EVM networks are supported via their **native JSON-RPC protocols**. Method names and request formats differ from the Ethereum standard — refer to each network's official documentation for the correct method signatures.
+
+| Network | Slug | Protocol |
+|---|---|---|
+| Solana | `solana` | Native Solana JSON-RPC |
+| NEAR | `near` | Native NEAR JSON-RPC |
+| Cosmos Hub | `cosmos` | Native Cosmos JSON-RPC / REST |
+
+## Network Slugs
+
+The **network slug** is the final path segment in your NexoraNode endpoint URL. It tells NexoraNode's routing layer which blockchain to forward your request to.
+
+The full URL pattern is:
+
+```
+https://rpc.nexoranode.xyz/{API_KEY}/{network-slug}
+```
+
+For example, to target **Ethereum Mainnet** your endpoint would be:
+
+```
+https://rpc.nexoranode.xyz/abc123xyz/ethereum
+```
+
+And to target **Polygon Mainnet**:
+
+```
+https://rpc.nexoranode.xyz/abc123xyz/polygon
+```
+
+Swap the slug — everything else in your code stays the same.
+
+<Tip>
+  The NexoraNode dashboard always shows the up-to-date list of supported networks, including any newly added chains. Visit [your dashboard](https://app.nexoranode.xyz) to see the latest slugs and check network status.
+</Tip>

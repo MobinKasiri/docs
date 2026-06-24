@@ -1,0 +1,144 @@
+---
+title: "Use viem with NexoraNode for Type-Safe Ethereum Calls"
+sidebarTitle: "viem"
+description: "Configure a viem public client with your NexoraNode endpoint for type-safe Ethereum RPC calls with full TypeScript support."
+---
+
+viem is a modern, TypeScript-first Ethereum library built for reliability and developer experience. It ships with full type inference for ABI calls, predictable error handling, and a composable client architecture — making it an excellent choice for new projects that want end-to-end type safety from RPC call to decoded return value.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install viem
+```
+
+```bash yarn
+yarn add viem
+```
+
+```bash pnpm
+pnpm add viem
+```
+
+</CodeGroup>
+
+## Create a Public Client
+
+A `PublicClient` handles all read-only RPC calls. Pass an `http()` transport pointing at your NexoraNode endpoint and specify the target chain.
+
+```typescript
+import { createPublicClient, http } from "viem";
+import { mainnet } from "viem/chains";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const client = createPublicClient({
+  chain: mainnet,
+  transport: http(url),
+});
+
+// Fetch the latest block number
+const blockNumber = await client.getBlockNumber();
+console.log("Latest block:", blockNumber);
+```
+
+## WebSocket Transport
+
+Swap the `http()` transport for `webSocket()` to enable real-time subscriptions. The `watchBlockNumber` action fires your callback every time a new block is published.
+
+```typescript
+import { createPublicClient, webSocket } from "viem";
+import { mainnet } from "viem/chains";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const wsUrl = `wss://ws.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const client = createPublicClient({
+  chain: mainnet,
+  transport: webSocket(wsUrl),
+});
+
+// Watch for new block numbers in real time
+const unwatch = client.watchBlockNumber({
+  onBlockNumber: (blockNumber) => {
+    console.log("New block:", blockNumber);
+  },
+});
+
+// Stop watching when done
+// unwatch();
+```
+
+## Read Contract Data
+
+Use `client.readContract` with `parseAbi` to call view functions with full TypeScript type inference. viem decodes the return value automatically based on the ABI you provide.
+
+```typescript
+import { createPublicClient, http, parseAbi } from "viem";
+import { mainnet } from "viem/chains";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const client = createPublicClient({
+  chain: mainnet,
+  transport: http(url),
+});
+
+const TOKEN_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as const; // USDC
+const WALLET_ADDRESS = "0xYourWalletAddressHere" as const;
+
+// Human-readable ABI parsed at compile time — return type is inferred as bigint
+const balance = await client.readContract({
+  address: TOKEN_ADDRESS,
+  abi: parseAbi(["function balanceOf(address) view returns (uint256)"]),
+  functionName: "balanceOf",
+  args: [WALLET_ADDRESS],
+});
+
+console.log("Balance (raw):", balance);
+// Format with 6 decimals for USDC
+console.log("Balance (USDC):", Number(balance) / 1_000_000);
+```
+
+## Multiple Chains
+
+Create independent clients for different chains simultaneously — each with its own NexoraNode endpoint and chain configuration. This pattern is useful for cross-chain applications that need to query multiple networks in parallel.
+
+```typescript
+import { createPublicClient, http } from "viem";
+import { mainnet, polygon } from "viem/chains";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+
+// Ethereum Mainnet client
+const ethereumClient = createPublicClient({
+  chain: mainnet,
+  transport: http(`https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`),
+});
+
+// Polygon client
+const polygonClient = createPublicClient({
+  chain: polygon,
+  transport: http(`https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/polygon`),
+});
+
+// Query both chains concurrently
+const [ethBlock, polygonBlock] = await Promise.all([
+  ethereumClient.getBlockNumber(),
+  polygonClient.getBlockNumber(),
+]);
+
+console.log("Ethereum block:", ethBlock);
+console.log("Polygon block:", polygonBlock);
+```
+
+<Tip>
+  viem is designed to be fully tree-shakeable. Importing only the actions and
+  utilities your application actually uses (e.g. `getBlockNumber`,
+  `readContract`) keeps your production bundle lean — unused RPC methods are
+  eliminated at build time by any standard bundler.
+</Tip>

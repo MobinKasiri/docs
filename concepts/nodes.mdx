@@ -1,0 +1,64 @@
+---
+title: "Nodes: Shared vs. Dedicated Infrastructure"
+sidebarTitle: "Nodes"
+description: "Understand the difference between shared and dedicated blockchain nodes on NexoraNode and choose the right option for your workload."
+---
+
+NexoraNode manages a global fleet of blockchain **full and archive nodes** so you never have to provision, sync, or maintain your own infrastructure. When you send an RPC request, it is routed to one of these nodes, which reads from or writes to the blockchain on your behalf. Understanding how nodes are provisioned — and who shares them — helps you choose the right plan for your workload.
+
+## Shared Nodes
+
+On the **Free** and **Pro** plans, your requests are served by a shared node cluster. Multiple customers' traffic runs through the same pool of nodes, which NexoraNode manages and auto-scales horizontally to handle demand.
+
+Shared nodes are ideal for:
+
+- **Development and testing** — rapid iteration without cost overhead
+- **Moderate production traffic** — applications that stay within their monthly request and rate-limit quotas
+- **New projects** — teams that want managed infrastructure before committing to dedicated capacity
+
+Because the cluster scales automatically, most applications on shared nodes see consistent performance. In rare cases of extreme aggregate traffic spikes, a noisy-neighbor effect can introduce brief latency variance — which is where dedicated nodes become the better choice.
+
+<Note>
+  Shared node clusters auto-scale horizontally. You never need to request a capacity increase — NexoraNode handles it transparently as aggregate demand grows.
+</Note>
+
+## Dedicated Nodes
+
+On the **Enterprise** plan, NexoraNode provisions a node (or node cluster) exclusively for your account. No other customer's traffic touches your infrastructure.
+
+Dedicated nodes are ideal for:
+
+- **High-throughput production applications** — trading bots, high-frequency dApps, data indexers
+- **Latency-sensitive workloads** — where every millisecond of noisy-neighbor variance matters
+- **Archive data access** — querying historical state from any block since genesis
+- **Custom rate limits** — negotiated throughput ceilings tailored to your traffic profile
+
+## Shared vs. Dedicated at a Glance
+
+| Feature | Shared | Dedicated |
+|---|---|---|
+| **Latency** | Low (occasional variance under peak load) | Consistently low (no noisy-neighbor) |
+| **Rate Limits** | Up to 100 req/s (plan-dependent) | Custom — negotiated at contract time |
+| **Archive Data** | ❌ Not available | ✅ Full history since genesis |
+| **Uptime SLA** | 99.9% | 99.99% with Priority SLA |
+| **Best For** | Development, moderate production traffic | High-throughput, latency-sensitive, archive workloads |
+
+## Node Types
+
+NexoraNode operates two categories of nodes under the hood. The node type you have access to depends on your plan.
+
+### Full Node
+
+A full node stores the **current chain state** plus a rolling window of approximately the most recent 128 blocks. It can answer the vast majority of everyday RPC calls — balances, transactions, logs, contract reads — as long as you are querying recent data.
+
+Full nodes are available on all plans (Free, Pro, and Enterprise).
+
+### Archive Node
+
+An archive node stores the **complete history of the blockchain from the genesis block**, including every intermediate state root at every block height. This makes it possible to call methods like `eth_getBalance` or `eth_call` at any historical block number.
+
+Archive nodes are available **exclusively on the Enterprise (dedicated) plan**.
+
+<Note>
+  If you attempt an archive query — for example, specifying a very old block number in an `eth_call` — on a shared (full) node, you will receive an error indicating that the state is not available. Upgrade to Enterprise to unlock archive access.
+</Note>

@@ -1,0 +1,122 @@
+---
+title: "RPC Endpoints: URL Structure and Routing"
+sidebarTitle: "Endpoints"
+description: "Learn how NexoraNode RPC endpoint URLs are structured, how to format JSON-RPC requests, and how to use batch calls for efficiency."
+---
+
+An **endpoint** is the URL you send JSON-RPC requests to in order to read from or write to a blockchain. NexoraNode provides two endpoint types — HTTP for standard request/response calls and WebSocket for persistent connections and real-time subscriptions. Both are secured by your API key, embedded directly in the URL path.
+
+## HTTP Endpoint URL Format
+
+Use the HTTP endpoint for the majority of RPC calls: querying balances, reading contract state, sending transactions, fetching blocks, and so on.
+
+```
+https://rpc.nexoranode.xyz/{API_KEY}/{network-slug}
+```
+
+**All HTTP requests must be sent as `HTTP POST`** with a `Content-Type: application/json` header and a JSON-RPC 2.0 body. `GET` requests are not supported.
+
+Replace `{API_KEY}` with your key from the [NexoraNode dashboard](https://app.nexoranode.xyz) and `{network-slug}` with the target network (e.g., `ethereum`, `polygon`, `base`). See the [Networks reference](/concepts/networks) for the full list of slugs.
+
+## WebSocket Endpoint URL Format
+
+Use the WebSocket endpoint when you need a **persistent, low-latency connection** — most commonly for `eth_subscribe` calls that push real-time data (new blocks, pending transactions, log events) to your application.
+
+```
+wss://ws.nexoranode.xyz/{API_KEY}/{network-slug}
+```
+
+The same API key and network slug conventions apply. Once your WebSocket connection is open, send JSON-RPC 2.0 messages as text frames and receive responses or subscription events as inbound text frames.
+
+<Info>
+  Both HTTP and WebSocket endpoints accept requests from any origin by default — CORS is fully open. If your Enterprise plan requires origin restrictions, contact [support](mailto:support@nexoranode.xyz) to configure an allowlist for your dedicated node.
+</Info>
+
+## Request Format
+
+NexoraNode speaks **JSON-RPC 2.0**. Every request body must include the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `jsonrpc` | `string` | Always `"2.0"` |
+| `method` | `string` | The RPC method to call (e.g., `eth_blockNumber`) |
+| `params` | `array` | Method parameters — use an empty array `[]` when the method takes none |
+| `id` | `number \| string` | Your chosen request identifier, echoed back in the response |
+
+**Example — get the latest block number on Ethereum:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "eth_blockNumber",
+  "params": [],
+  "id": 1
+}
+```
+
+Sending this with `curl`:
+
+```bash
+curl https://rpc.nexoranode.xyz/YOUR_API_KEY/ethereum \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_blockNumber",
+    "params": [],
+    "id": 1
+  }'
+```
+
+A successful response looks like:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "0x13d5e40"
+}
+```
+
+## Batch Requests
+
+Rather than making multiple sequential HTTP round-trips, you can send an **array** of JSON-RPC request objects in a single HTTP POST. NexoraNode processes all calls in the batch and returns an array of responses in the same order.
+
+**Example — batch three calls in one request:**
+
+```json
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "eth_blockNumber",
+    "params": [],
+    "id": 1
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "eth_gasPrice",
+    "params": [],
+    "id": 2
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "eth_getBalance",
+    "params": ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "latest"],
+    "id": 3
+  }
+]
+```
+
+The response is a JSON array with one result object per request:
+
+```json
+[
+  { "jsonrpc": "2.0", "id": 1, "result": "0x13d5e40" },
+  { "jsonrpc": "2.0", "id": 2, "result": "0x5f5e100" },
+  { "jsonrpc": "2.0", "id": 3, "result": "0x10f0cf064dd592000" }
+]
+```
+
+<Note>
+  Each individual call inside a batch counts as **one request** toward your plan's rate limit and monthly quota. A batch of 3 calls deducts 3 requests from your allowance, the same as 3 separate HTTP calls. Batching saves network round-trips but does not reduce your request consumption.
+</Note>

@@ -1,0 +1,131 @@
+---
+title: "Frequently Asked Questions About NexoraNode"
+sidebarTitle: "FAQ"
+description: "Find answers to common questions about NexoraNode plans, billing, supported networks, rate limits, and account management."
+---
+
+NexoraNode provides managed blockchain node infrastructure so you can build and scale decentralized applications without ever provisioning or maintaining servers. Whether you're just getting started or evaluating an Enterprise deployment, the answers below cover the most common questions our users ask.
+
+<AccordionGroup>
+  <Accordion title="What is NexoraNode?">
+    NexoraNode is a managed blockchain node infrastructure platform. Instead of running your own nodes — dealing with hardware provisioning, software upgrades, syncing, and uptime monitoring — you connect to NexoraNode's globally distributed endpoints and make standard JSON-RPC calls just as you would against a self-hosted node.
+
+    Every plan gives you a dedicated API key, access to multiple networks, and real-time usage analytics through the dashboard. You focus on your application; NexoraNode handles everything underneath.
+  </Accordion>
+
+  <Accordion title="Do I need a credit card to sign up?">
+    No. The **Free plan** costs $0 per month and requires no payment method at sign-up. You can create an account, generate an API key, and start making requests immediately.
+
+    A credit card is only required when you upgrade to the **Pro** plan ($49/mo) or initiate an **Enterprise** contract. You can add a payment method at any time from **Dashboard → Billing**.
+  </Accordion>
+
+  <Accordion title="How do I get an API key?">
+    After creating your account, navigate to **Dashboard → API Keys** and click **Create New Key**. You can give each key a name and, on Pro and Enterprise plans, restrict its scope to specific networks or API surfaces.
+
+    For a full walkthrough — including how to rotate keys, set environment variables, and use keys securely — see the [API Keys guide](/getting-started/api-keys).
+  </Accordion>
+
+  <Accordion title="What happens when I reach the Free plan monthly request limit?">
+    The Free plan includes **1,000,000 requests per month**. Once that limit is reached, any further requests will receive an **HTTP 429** response with the error code `monthly_limit_exceeded` until your usage counter resets at the start of the next calendar month.
+
+    ```json
+    {
+      "error": {
+        "code": "monthly_limit_exceeded",
+        "message": "You have exceeded your monthly request quota. Upgrade your plan or wait for the monthly reset.",
+        "status": 429
+      }
+    }
+    ```
+
+    To avoid interruptions, you can upgrade to **Pro** at any time from **Dashboard → Billing**. The upgrade takes effect immediately and your new quota applies right away.
+  </Accordion>
+
+  <Accordion title="Can I switch plans at any time?">
+    Yes, with the following behavior:
+
+    - **Upgrades** (e.g., Free → Pro, or Pro → Enterprise) take effect **immediately**. Your new request quota and rate limits are applied as soon as the billing change is confirmed.
+    - **Downgrades** (e.g., Pro → Free) take effect at the **start of your next billing cycle**. You continue to enjoy your current plan's limits until then.
+
+    To change your plan, go to **Dashboard → Billing → Change Plan**.
+  </Accordion>
+
+  <Accordion title="What is the overage cost on the Pro plan?">
+    The **Pro plan** includes **25,000,000 requests per month**. If you exceed that threshold, additional requests are billed at **$0.0000015 per request** (that's $1.50 per 1,000,000 requests).
+
+    Overage charges are calculated at the end of your billing period and added to your next invoice. You can monitor consumption in real time at **Dashboard → Analytics → Usage Summary** to avoid unexpected charges.
+
+    If you consistently exceed 25M requests, consider speaking with our team about an **Enterprise** plan with unlimited requests and predictable flat-rate pricing.
+  </Accordion>
+
+  <Accordion title="Is there a discount for annual billing?">
+    Yes. Choosing **annual billing** saves you **20%** on both the **Pro** and **Enterprise** plans compared to the equivalent monthly rate.
+
+    | Plan       | Monthly Billing | Annual Billing (per month) | Savings |
+    |------------|-----------------|---------------------------|---------|
+    | Pro        | $49/mo          | $39.20/mo                 | 20%     |
+    | Enterprise | Custom          | Custom − 20%              | 20%     |
+
+    You can switch to annual billing from **Dashboard → Billing → Billing Cycle**. The discount is applied immediately and your card is charged for the full year upfront.
+  </Accordion>
+
+  <Accordion title="Which JSON-RPC methods are supported?">
+    NexoraNode supports **all standard JSON-RPC methods** for each network — for example, `eth_blockNumber`, `eth_call`, `eth_getTransactionByHash`, `net_version`, and the full `debug_*` / `trace_*` namespaces where the network supports them.
+
+    **Archive data** (historical state queries going back to the genesis block) requires a **Dedicated** node, available on the **Enterprise** plan. Shared nodes on Free and Pro retain a limited block history. Queries that require archive data on a shared node will return an RPC error.
+
+    If you need a specific method enabled or have questions about namespace availability on a particular network, email [support@nexoranode.xyz](mailto:support@nexoranode.xyz).
+  </Accordion>
+
+  <Accordion title="Do you support WebSocket connections?">
+    Yes. Every API key includes access to NexoraNode's WebSocket endpoints, which are ideal for real-time subscriptions (`eth_subscribe`) and event streaming.
+
+    **WebSocket endpoint format:**
+    ```
+    wss://ws.nexoranode.xyz/{API_KEY}/{network}
+    ```
+
+    Replace `{API_KEY}` with your key and `{network}` with the network slug (e.g., `ethereum-mainnet`, `polygon-mainnet`). The same rate limits and monthly quotas apply to WebSocket messages as to HTTP requests.
+
+    <Note>
+      WebSocket connections have a **60-second idle timeout**. Send a keepalive ping every 30 seconds if your connection may be idle. See the [Troubleshooting guide](/support/troubleshooting) for a code example.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Can I use NexoraNode directly from a frontend application?">
+    Technically yes — your API key works from any HTTP or WebSocket client, including browser-based apps. However, **we strongly recommend against exposing your API key in frontend code**, because anyone who inspects your JavaScript bundle or network requests can steal your key and consume your quota.
+
+    The recommended pattern is to build a lightweight **backend proxy** that holds the API key server-side and forwards requests from your frontend. This keeps your key private and lets you add your own authentication, caching, or rate limiting on top.
+
+    See the [Troubleshooting guide](/support/troubleshooting) for a minimal Express.js proxy example.
+  </Accordion>
+
+  <Accordion title="What is the typical request latency?">
+    Latency depends on your plan type and geographic proximity to our points of presence:
+
+    | Infrastructure | Typical Latency |
+    |----------------|-----------------|
+    | Shared (Free & Pro) | **< 50 ms** |
+    | Dedicated (Enterprise) | **< 20 ms** |
+
+    These figures represent median round-trip times for clients located near a NexoraNode region. Actual latency varies with network conditions, request complexity (e.g., heavy `eth_call` simulations), and client location.
+
+    Enterprise customers can request region-specific dedicated nodes to minimize latency for their user base.
+  </Accordion>
+
+  <Accordion title="How do I request support for a new network?">
+    We're continuously expanding our network catalog. If you need a network that isn't listed in the dashboard, send an email to [support@nexoranode.xyz](mailto:support@nexoranode.xyz) with:
+
+    - The network name and chain ID
+    - Your use case and expected request volume
+    - Any timeline requirements
+
+    Our team reviews all network requests and will respond with availability estimates or ask any clarifying questions. Enterprise customers with contractual SLAs receive prioritized network onboarding.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+<Info>
+  Still have questions? Our team is ready to help. Email us at [support@nexoranode.xyz](mailto:support@nexoranode.xyz) and we'll get back to you based on your plan's support tier. You can also check real-time service health at [status.nexoranode.xyz](https://status.nexoranode.xyz).
+</Info>

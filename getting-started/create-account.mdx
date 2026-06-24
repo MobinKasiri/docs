@@ -1,0 +1,72 @@
+---
+title: "Create Your NexoraNode Account"
+sidebarTitle: "Create Account"
+description: "Sign up for NexoraNode and configure your account to start accessing RPC endpoints and managed blockchain node infrastructure."
+---
+
+Creating a NexoraNode account takes less than two minutes and gives you immediate access to RPC endpoints across 20+ blockchain networks. This guide walks you through signup, email verification, plan selection, and first login to the dashboard.
+
+## Steps
+
+<Steps>
+  <Step title="Visit nexoranode.xyz and Click Get Started">
+    Open [nexoranode.xyz](https://nexoranode.xyz) in your browser and click the **Get Started** button in the top navigation bar. This takes you to the signup page.
+  </Step>
+
+  <Step title="Create Your Account">
+    Choose how you'd like to register:
+
+    - **Email & password** — enter your email address and choose a strong password, then click **Create Account**.
+    - **Sign in with GitHub** — authorize the NexoraNode OAuth app. Your GitHub primary email is used as your account email.
+    - **Sign in with Google** — authorize NexoraNode with your Google account.
+
+    All three methods create a full NexoraNode account with identical capabilities. OAuth sign-ups skip the email verification step below because the identity provider has already verified your address.
+  </Step>
+
+  <Step title="Verify Your Email">
+    If you signed up with email and password, NexoraNode sends a verification email to the address you provided. Open the email and click **Verify Email Address**.
+
+    - The link expires after **24 hours**. If it expires, log in to the dashboard and request a new verification email from the banner at the top of the page.
+    - Check your spam folder if the email doesn't arrive within a few minutes.
+  </Step>
+
+  <Step title="Choose a Plan">
+    After verification you're prompted to select a plan. You can change your plan at any time from **Account → Billing** in the dashboard.
+
+    | Feature | Free | Pro | Enterprise |
+    |---|---|---|---|
+    | **Price** | $0 / month | $49 / month | Custom |
+    | **Requests / month** | 1,000,000 | 25,000,000 | Unlimited |
+    | **Rate limit** | 10 req / s | 100 req / s | Dedicated |
+    | **Node type** | Shared | Shared | Dedicated |
+    | **SLA uptime** | Best effort | 99.9% | 99.99% |
+    | **Support** | Community | Email | Dedicated SRE |
+
+    If you're evaluating NexoraNode or building a side project, the **Free** plan is a great starting point — no credit card required. For production workloads, **Pro** or **Enterprise** is recommended. See [Plans & Pricing](/concepts/plans) for a full feature comparison.
+  </Step>
+
+  <Step title="Access the Dashboard">
+    Once your plan is selected you're redirected to the [NexoraNode dashboard](https://app.nexoranode.xyz). From here you can:
+
+    - Create and manage **Endpoints** for any supported network.
+    - Generate and rotate **API Keys**.
+    - View real-time **Analytics** for your requests.
+    - Manage **Team Members** and billing.
+  </Step>
+</Steps>
+
+<Note>
+  **Team accounts** are available on all plans. To invite a teammate, navigate to **Account → Team** and click **Invite Member**. Enter their email address and assign one of the following roles:
+
+  | Role | Permissions |
+  |---|---|
+  | **Admin** | Full access — manage endpoints, API keys, billing, and team members. |
+  | **Developer** | Create and manage endpoints and API keys; cannot access billing or invite members. |
+  | **Viewer** | Read-only access to endpoints and analytics; cannot create keys or modify settings. |
+
+  Invited members receive an email with a link to join your team. They must have (or create) a NexoraNode account to accept the invitation.
+</Note>
+
+<Tip>
+  Your next step is to generate an API key so you can authenticate RPC and management API requests. Head to [Create and Manage API Keys](/getting-started/api-keys) to get started.
+</Tip>

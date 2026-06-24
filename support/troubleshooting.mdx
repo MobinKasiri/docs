@@ -1,0 +1,395 @@
+---
+title: "Troubleshoot Common NexoraNode Issues"
+sidebarTitle: "Troubleshooting"
+description: "Diagnose and fix connection errors, authentication failures, rate limiting, and RPC errors when using NexoraNode endpoints."
+---
+
+Most issues you encounter with NexoraNode fall into one of four categories: authentication failures, rate limiting, connection problems, or JSON-RPC errors. This guide walks you through each category with concrete error examples, root causes, and step-by-step fixes. If you work through the relevant section and still can't resolve your issue, see [Getting Help](#getting-help) at the bottom.
+
+---
+
+## Authentication Errors
+
+### 401 Unauthorized — Invalid or Missing API Key
+
+A `401` response means NexoraNode could not identify your request. The most common causes are a missing `Authorization` header, a typo in the key, or using a key that has been deleted or rotated.
+
+**Error response:**
+```json
+{
+  "error": {
+    "code": "invalid_api_key",
+    "message": "The API key provided is missing or invalid.",
+    "status": 401
+  }
+}
+```
+
+**Incorrect — key passed as a bare string without the `Bearer` prefix:**
+```bash
+curl https://rpc.nexoranode.xyz/ethereum-mainnet \
+  -H "Authorization: MY_API_KEY_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Correct — key passed with the `Bearer` scheme:**
+```bash
+curl https://rpc.nexoranode.xyz/ethereum-mainnet \
+  -H "Authorization: Bearer MY_API_KEY_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+**Checklist:**
+1. Open **Dashboard → API Keys** and confirm the key exists and is not marked as revoked.
+2. Copy the key value directly from the dashboard to rule out clipboard or encoding issues.
+3. Ensure the `Authorization` header value is exactly `Bearer <key>` — no extra spaces, line breaks, or quotes.
+4. If you recently rotated your key, update all environments (local `.env`, CI secrets, deployed services) with the new value.
+
+---
+
+### 403 Forbidden — Insufficient Scope
+
+A `403` response means your API key was recognized but lacks the permissions required for the action you're attempting. This most often happens when you use an **RPC-scoped key** to call the NexoraNode **Management API** (e.g., `/v1/usage/summary` or `/v1/keys`).
+
+**Error response:**
+```json
+{
+  "error": {
+    "code": "insufficient_scope",
+    "message": "This API key does not have permission to access the requested resource.",
+    "status": 403
+  }
+}
+```
+
+**Fix:** Create a new key with the appropriate scope.
+
+1. Go to **Dashboard → API Keys → Create New Key**.
+2. Under **Scopes**, select **Full Access** (or enable the specific Management API scopes you need).
+3. Replace the scoped key in your Management API calls with the new full-scope key.
+4. Keep your RPC-only key separate for node endpoint calls — principle of least privilege.
+
+<Warning>
+  Avoid using a full-scope key in client-side code or anywhere it could be exposed publicly. Full-scope keys can read billing data and manage other keys on your account.
+</Warning>
+
+---
+
+## Rate Limiting
+
+### 429 — Per-Second Rate Limit Exceeded
+
+NexoraNode enforces a per-second request rate on each plan (Free: 10 req/s, Pro: 100 req/s). If your code sends requests faster than your plan allows, you'll receive a `429` until the current second window resets. The `X-RateLimit-Reset` response header contains the Unix timestamp at which the limit resets.
+
+**Error response:**
+```json
+{
+  "error": {
+    "code": "rate_limit_exceeded",
+    "message": "You have exceeded the per-second rate limit for your plan. Slow down your request rate or upgrade your plan.",
+    "status": 429
+  }
+}
+```
+
+**Recommended fix — exponential backoff with jitter in JavaScript:**
+```javascript
+async function rpcRequestWithRetry(payload, maxRetries = 5) {
+  const endpoint = "https://rpc.nexoranode.xyz/ethereum-mainnet";
+  const headers = {
+    "Authorization": `Bearer ${process.env.NEXORA_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (response.status !== 429) {
+      return response.json();
+    }
+
+    if (attempt === maxRetries) {
+      throw new Error("Max retries reached after repeated 429 responses.");
+    }
+
+    // Respect the server's reset time if provided, otherwise use exponential backoff
+    const resetHeader = response.headers.get("X-RateLimit-Reset");
+    const resetAt = resetHeader ? parseInt(resetHeader, 10) * 1000 : null;
+    const now = Date.now();
+
+    const backoffMs = resetAt && resetAt > now
+      ? resetAt - now
+      : Math.min(1000 * 2 ** attempt + Math.random() * 200, 10000);
+
+    console.warn(`Rate limited. Retrying in ${Math.round(backoffMs)}ms (attempt ${attempt + 1}/${maxRetries})...`);
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+  }
+}
+```
+
+<Note>
+  If you're consistently hitting the per-second limit, consider batching multiple JSON-RPC calls into a single HTTP request using the JSON-RPC batch specification, or upgrade to a plan with a higher rate limit.
+</Note>
+
+---
+
+### 429 — Monthly Request Limit Exceeded
+
+The Free plan includes 1M requests/month and the Pro plan includes 25M requests/month. Exceeding either cap blocks all further requests until the monthly counter resets, or until you upgrade.
+
+**Error response:**
+```json
+{
+  "error": {
+    "code": "monthly_limit_exceeded",
+    "message": "You have exceeded your monthly request quota. Upgrade your plan or wait for the monthly reset.",
+    "status": 429
+  }
+}
+```
+
+**Check your current usage:**
+
+From the dashboard:
+1. Go to **Dashboard → Analytics → Usage Summary** to see requests consumed vs. your monthly quota.
+
+Via the Management API:
+```bash
+curl https://api.nexoranode.xyz/v1/usage/summary \
+  -H "Authorization: Bearer YOUR_FULL_SCOPE_KEY"
+```
+
+**Resolution options:**
+- **Wait** — your counter resets at 00:00 UTC on the first day of the next calendar month.
+- **Upgrade** — go to **Dashboard → Billing → Change Plan** to move to Pro (or contact sales for Enterprise). The new quota applies immediately after the upgrade.
+
+---
+
+## Connection Issues
+
+### CORS Errors in the Browser
+
+NexoraNode does include CORS headers, so direct browser requests to your RPC endpoint _can_ work. However, making RPC calls from frontend code exposes your API key to anyone who inspects the page's network traffic.
+
+**Recommended approach — a thin server-side proxy:**
+
+The example below uses Express.js to forward RPC requests from your frontend without leaking your API key:
+
+```javascript
+// proxy-server.js
+import express from "express";
+import fetch from "node-fetch";
+
+const app = express();
+app.use(express.json());
+
+const NEXORA_ENDPOINT = "https://rpc.nexoranode.xyz/ethereum-mainnet";
+
+app.post("/rpc", async (req, res) => {
+  try {
+    const upstream = await fetch(NEXORA_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.NEXORA_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    res.status(502).json({ error: "Upstream request failed", detail: err.message });
+  }
+});
+
+app.listen(3000, () => console.log("RPC proxy listening on port 3000"));
+```
+
+Your frontend then calls `POST /rpc` on your own domain — no API key is ever sent to the browser.
+
+---
+
+### WebSocket Disconnects
+
+NexoraNode WebSocket connections have a **60-second idle timeout**. If no messages are sent or received within that window, the server closes the connection. This is normal behavior — your client should detect the close event and reconnect, or proactively send keepalive pings.
+
+**Keepalive pattern — send a ping every 30 seconds:**
+
+```javascript
+const WebSocket = require("ws");
+
+const API_KEY = process.env.NEXORA_API_KEY;
+const NETWORK = "ethereum-mainnet";
+const WS_URL = `wss://ws.nexoranode.xyz/${API_KEY}/${NETWORK}`;
+
+function connect() {
+  const ws = new WebSocket(WS_URL);
+  let pingInterval;
+
+  ws.on("open", () => {
+    console.log("WebSocket connected.");
+
+    // Send a JSON-RPC ping every 30 seconds to prevent idle timeout
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          jsonrpc: "2.0",
+          method: "net_version",
+          params: [],
+          id: "keepalive",
+        }));
+      }
+    }, 30_000);
+  });
+
+  ws.on("message", (data) => {
+    const message = JSON.parse(data);
+    if (message.id !== "keepalive") {
+      console.log("Received:", message);
+    }
+  });
+
+  ws.on("close", (code, reason) => {
+    console.warn(`WebSocket closed (code ${code}). Reconnecting in 3s...`);
+    clearInterval(pingInterval);
+    setTimeout(connect, 3000);
+  });
+
+  ws.on("error", (err) => {
+    console.error("WebSocket error:", err.message);
+    ws.close();
+  });
+}
+
+connect();
+```
+
+---
+
+### SSL/TLS Errors
+
+NexoraNode endpoints are **HTTPS/WSS only**. Attempting to connect over plain HTTP or WS will fail.
+
+<Warning>
+  Always use `https://` for RPC endpoints and `wss://` for WebSocket endpoints. Using `http://` or `ws://` will result in a connection error or redirect that many HTTP clients do not follow automatically.
+</Warning>
+
+| ❌ Incorrect | ✅ Correct |
+|---|---|
+| `http://rpc.nexoranode.xyz/...` | `https://rpc.nexoranode.xyz/...` |
+| `ws://ws.nexoranode.xyz/...` | `wss://ws.nexoranode.xyz/...` |
+
+If you see TLS certificate errors (e.g., `CERT_HAS_EXPIRED` or `UNABLE_TO_VERIFY_LEAF_SIGNATURE`), check:
+
+1. Your system's CA certificate store is up to date.
+2. You are not intercepting TLS traffic with a misconfigured proxy or firewall.
+3. Your runtime's TLS library is reasonably current (Node.js 18+, Python 3.8+).
+
+---
+
+## RPC Errors
+
+JSON-RPC errors are returned **inside an HTTP 200 response**. Always check the response body for an `error` field — an HTTP 200 does not guarantee a successful RPC call.
+
+### -32601 Method Not Found
+
+This error means the JSON-RPC method name in your request does not exist on the endpoint. The most common cause is a typo.
+
+**Error response (inside HTTP 200):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32601,
+    "message": "Method not found"
+  }
+}
+```
+
+**Common typos to check:**
+
+| ❌ Incorrect | ✅ Correct |
+|---|---|
+| `eth_getBlockByNum` | `eth_getBlockByNumber` |
+| `eth_getTransactionReceipt` | ✅ (this one is correct) |
+| `eth_accounts` | `eth_accounts` ✅ |
+| `eht_blockNumber` | `eth_blockNumber` |
+
+Double-check the method name against the [Ethereum JSON-RPC specification](https://ethereum.org/en/developers/docs/apis/json-rpc/) or the documentation for the specific network you're targeting.
+
+---
+
+### -32602 Invalid Parameters
+
+This error means the method name is correct but the parameters you provided are the wrong type, wrong count, or incorrectly formatted.
+
+**Example: `eth_getBalance`**
+
+The method signature is `eth_getBalance(address: string, block: string)`. Both parameters are required.
+
+**Incorrect — missing the block parameter:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "eth_getBalance",
+  "params": ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"],
+  "id": 1
+}
+```
+
+**Correct — address plus block tag:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "eth_getBalance",
+  "params": ["0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "latest"],
+  "id": 1
+}
+```
+
+Valid block tag values are `"latest"`, `"earliest"`, `"pending"`, or a hex-encoded block number (e.g., `"0x10d4f"`).
+
+---
+
+### Archive Data Not Available on Shared Nodes
+
+If you request historical state — such as `eth_getBalance` at a block number older than what a shared node retains — you will receive an RPC error like:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "missing trie node ... (archive node required)"
+  }
+}
+```
+
+**Resolution:** Archive data requires a **Dedicated node**, available on the **Enterprise** plan. See the [Plans overview](/concepts/plans) for details on what's included in each tier, or contact [support@nexoranode.xyz](mailto:support@nexoranode.xyz) to discuss an Enterprise arrangement.
+
+---
+
+## Getting Help
+
+<Info>
+  **Support response times by plan:**
+
+  | Plan       | Support Channel        | Response Time |
+  |------------|------------------------|---------------|
+  | Free       | Community forums       | Best effort   |
+  | Pro        | Email                  | Within 24 hours |
+  | Enterprise | Dedicated email & Slack | 4-hour SLA    |
+
+  Email us at [support@nexoranode.xyz](mailto:support@nexoranode.xyz) with your account email, the affected endpoint/network, a description of the issue, and any relevant request IDs or error messages. The more detail you include, the faster we can help.
+</Info>
+
+Before reaching out, check the **[NexoraNode Status Page](https://status.nexoranode.xyz)** to see if there is an active incident or scheduled maintenance affecting the service. Subscribing to status updates ensures you're notified automatically if an outage occurs.

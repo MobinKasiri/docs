@@ -1,0 +1,135 @@
+---
+title: "Connect ethers.js to NexoraNode RPC Endpoints"
+sidebarTitle: "ethers.js"
+description: "Use ethers.js v6 with your NexoraNode endpoint to read blockchain data, send transactions, and interact with smart contracts."
+---
+
+ethers.js v6 connects to NexoraNode in a single line — pass your NexoraNode RPC URL directly into `JsonRpcProvider` and you're ready to query any supported network, sign transactions, and listen to real-time events.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install ethers
+```
+
+```bash yarn
+yarn add ethers
+```
+
+```bash pnpm
+pnpm add ethers
+```
+
+</CodeGroup>
+
+## Connect with JsonRpcProvider
+
+`JsonRpcProvider` is the standard provider for HTTP RPC connections. Construct your NexoraNode endpoint URL from your API key and the target network slug, then pass it directly to the provider.
+
+```typescript
+import { ethers } from "ethers";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const provider = new ethers.JsonRpcProvider(url);
+
+// Fetch the latest block number
+const blockNumber = await provider.getBlockNumber();
+console.log("Latest block:", blockNumber);
+```
+
+## Connect with WebSocketProvider
+
+Use `WebSocketProvider` when you need persistent, real-time subscriptions — such as listening for new blocks or watching for contract events. WebSocket connections are ideal for applications that need low-latency updates.
+
+```typescript
+import { ethers } from "ethers";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const wsUrl = `wss://ws.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const provider = new ethers.WebSocketProvider(wsUrl);
+
+// Subscribe to new block headers
+provider.on("block", (blockNumber: number) => {
+  console.log("New block mined:", blockNumber);
+});
+
+// Clean up the connection when done
+// provider.destroy();
+```
+
+## Interact with Smart Contracts
+
+Create a `Contract` instance by supplying the contract address, a minimal ABI, and a provider. You can use a human-readable ABI fragment for lightweight integrations — no need to import the full ABI unless you need it.
+
+```typescript
+import { ethers } from "ethers";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+
+const provider = new ethers.JsonRpcProvider(url);
+
+// Minimal ABI — only the function you need
+const ERC20_ABI = ["function balanceOf(address) view returns (uint256)"];
+
+const TOKEN_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // USDC
+const WALLET_ADDRESS = "0xYourWalletAddressHere";
+
+const contract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, provider);
+
+const balance: bigint = await contract.balanceOf(WALLET_ADDRESS);
+console.log("Token balance (raw):", balance.toString());
+
+// Format from smallest unit (6 decimals for USDC)
+console.log("Token balance (USDC):", ethers.formatUnits(balance, 6));
+```
+
+## Send Transactions with a Signer
+
+To broadcast transactions, attach a `Wallet` signer to your provider. The wallet handles key management and transaction signing locally before submitting to the network through NexoraNode.
+
+<Warning>
+  Never hardcode private keys in your source code or commit them to version
+  control. Always load sensitive credentials from environment variables or a
+  secrets manager.
+</Warning>
+
+```typescript
+import { ethers } from "ethers";
+
+const NEXORA_API_KEY = process.env.NEXORA_API_KEY;
+const PRIVATE_KEY = process.env.PRIVATE_KEY; // Never hardcode this!
+
+const url = `https://rpc.nexoranode.xyz/${NEXORA_API_KEY}/ethereum`;
+const provider = new ethers.JsonRpcProvider(url);
+
+// Create a wallet and connect it to the provider
+const wallet = new ethers.Wallet(PRIVATE_KEY as string, provider);
+
+console.log("Sending from:", wallet.address);
+
+// Send an ETH transfer
+const tx = await wallet.sendTransaction({
+  to: "0xRecipientAddressHere",
+  value: ethers.parseEther("0.01"), // 0.01 ETH
+});
+
+console.log("Transaction hash:", tx.hash);
+
+// Wait for the transaction to be mined
+const receipt = await tx.wait();
+console.log("Confirmed in block:", receipt?.blockNumber);
+```
+
+<Note>
+  All examples above use **ethers.js v6** syntax. If you are on ethers.js v5,
+  replace `ethers.JsonRpcProvider` with `ethers.providers.JsonRpcProvider` and
+  `ethers.WebSocketProvider` with `ethers.providers.WebSocketProvider`. The
+  `ethers.parseEther` and `ethers.formatUnits` utilities are available in both
+  versions.
+</Note>
